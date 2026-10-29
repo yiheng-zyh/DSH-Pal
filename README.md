@@ -87,4 +87,8 @@ App 没有内置广告或分析 SDK；所用网络方案仍可能连接 Tailscal
 
 请提供 App版本、Android/ROM/WebView版本、手机或平板/屏幕方向、连接类型、相关插件、复现步骤、期望与实际、脱敏日志或录屏。**不要上传完整配对链接、Cookie、Tailscale授权链接、WireGuard私钥或私人会话。**
 
-维护者接手入口：**[PROJECT-HANDOFF.md](docs/PROJECT-HANDOFF.md)**。公开 GitHub 与 B站地址尚未设置，关于页保留对应位置。
+维护者接手入口：**[PROJECT-HANDOFF.md](docs/PROJECT-HANDOFF.md)**。
+
+- 项目主页：<https://github.com/yiheng-zyh/DSH-Pal>
+- 问题反馈：<https://github.com/yiheng-zyh/DSH-Pal/issues>
+- 哔哩哔哩：待配置（关于页保留对应位置）

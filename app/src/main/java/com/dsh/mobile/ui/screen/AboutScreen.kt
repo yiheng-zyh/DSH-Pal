@@ -1,5 +1,7 @@
 package com.dsh.mobile.ui.screen
 
+import android.content.Intent
+import android.net.Uri
 import com.dsh.mobile.ui.AppBackHandler as BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,7 +21,10 @@ import com.dsh.mobile.ui.DshBrandMark
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** Project URLs are intentionally unconfigured until the public repository is chosen. */
+/** Project URLs for the public repository. */
+private const val PROJECT_URL = "https://github.com/yiheng-zyh/DSH-Pal"
+private const val ISSUE_URL = "https://github.com/yiheng-zyh/DSH-Pal/issues"
+
 @Composable
 fun AboutScreen(onBack:()->Unit) {
     var document by remember {mutableStateOf<Pair<String,String>?>(null)}
@@ -40,8 +45,8 @@ fun AboutScreen(onBack:()->Unit) {
                     }
                     Card {Column(Modifier.fillMaxWidth().padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
                         Text("项目与社区")
-                        Text("GitHub 项目 · 发布后提供",fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
-                        Text("问题反馈 / Issue · 发布后提供",fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
+                        Text("GitHub 项目 · "+PROJECT_URL,fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant,modifier=Modifier.clickable{runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(PROJECT_URL)))}})
+                        Text("问题反馈 / Issue · "+ISSUE_URL,fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant,modifier=Modifier.clickable{runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(ISSUE_URL)))}})
                         Text("哔哩哔哩 · 待配置",fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
                         Text("当前可从支持与诊断导出问题日志。",fontSize=12.sp)
                     }}
