@@ -1,0 +1,67 @@
+﻿# ---- Android / Gradle ----
+.gradle/
+.kotlin/
+.gradle-project-cache/
+build/
+app/build/
+captures/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+local.properties
+
+# NOTE: gradle/wrapper/gradle-wrapper.jar IS committed on purpose — without it a
+# fresh clone cannot run ./gradlew, which is the documented build entry point.
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+
+# ---- Signing & secrets (NEVER commit) ----
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# ---- Local machine specifics ----
+# Personal DSH endpoints, instance ids, tunnel hostnames, LAN addresses.
+secrets.properties
+dsh-endpoint.properties
+*.local.properties
+
+# ---- Logs / temp ----
+*.log
+*.hprof
+build-output/
+screenshots-local/
+
+# ---- Local verification scaffolding (not part of the product) ----
+# On-device probe scripts and screenshots captured while testing against a local
+# emulator; they encode this machine's paths and ports, so they stay out of git.
+/tools/*.ps1
+/ui*.xml
+/*.png
+/adb-*.log
+/emu.log
+/emu.err.log
+/font-backup/
+/.local/
+/app/libs/*.aar
+/tools/*.sh
+
+# Icon source artwork (regenerate via tools/make_icons.py)
+/art/*
+!/art/improved-1.png
+!/art/whale-girl-transparent.png
+
+# Portable read-only diagnostics collector
+!/tools/collect-device-diagnostics.ps1
+!/tools/start-usb-development.ps1
+!/tools/prepare-tailscale-sdk.ps1

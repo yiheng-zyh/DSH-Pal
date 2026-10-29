@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window background matches the DSH dark theme so there is no white flash before the WebView paints. -->
+    <style name="Theme.DshMobile" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/dsh_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+
+    <!--
+      Launch theme, pre-API-31 fallback.
+
+      Android 12+ draws a system splash for every Activity using the app icon, and
+      HyperOS stamps the app label under it. That overlay sat on top of the
+      in-app BootScreen and produced a doubled-up "DSH" watermark. The splash
+      attributes needed to suppress it only exist from API 31, so before that the
+      launch theme is simply the normal theme.
+    -->
+    <style name="Theme.DshMobile.Launch" parent="Theme.DshMobile" />
+</resources>

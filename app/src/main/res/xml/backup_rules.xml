@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?><full-backup-content><exclude domain="file" path="tailscale/" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_tailscale.xml" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_index_tailscale.xml" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_wireguard.xml" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" /></full-backup-content>

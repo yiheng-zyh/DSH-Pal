@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps the WebSocket + island alive while the screen is off / app is backgrounded. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- QR pairing: scanning the link the desktop panel renders. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- WebRTC selects a communication device before opening its microphone. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Xiaomi HyperOS focus notification / Super Island permission (declared, granted by user in Settings). -->
+    <uses-permission android:name="miui.permission.USE_FOCUS_NOTIFICATION" />
+
+    <!--
+      Signature-level guard for the adb test hook. Declared here so the receiver
+      can require it; nothing else in the app uses it.
+    -->
+    <permission
+        android:name="com.dsh.mobile.permission.DEBUG_ISLAND"
+        android:protectionLevel="signature" />
+
+    <queries>
+        <package android:name="com.tailscale.ipn" />
+        <package android:name="com.wireguard.android" />
+    </queries>
+    <application
+        android:name=".DshApp"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@style/Theme.DshMobile">
+
+        <service android:name=".vpn.TailscaleVpnService" android:exported="false" android:permission="android.permission.BIND_VPN_SERVICE" android:foregroundServiceType="specialUse">
+            <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
+            <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON" android:value="false" />
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled app-scoped Tailscale remote workstation tunnel" />
+        </service>
+        <service android:name=".vpn.WireGuardKeepaliveService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled app-scoped WireGuard remote workstation tunnel" />
+        </service>
+        <service android:name="com.wireguard.android.backend.GoBackend$VpnService" android:exported="false" tools:node="merge">
+            <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON" android:value="false" tools:replace="android:value" />
+        </service>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:enableOnBackInvokedCallback="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustNothing"
+            android:theme="@style/Theme.DshMobile.Launch">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Deep link: dshmobile://open?url=<paired DSH link>  and https pair links handed to us -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dshmobile" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.DshLiveService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!--
+          Notification action handler (approve / inline reply).
+
+          The class lives in .island, not .service — a mismatch here registers no
+          receiver at all, so every action button silently did nothing.
+        -->
+        <receiver
+            android:name=".island.IslandActionReceiver"
+            android:exported="false" />
+
+        <!--
+          Exposes the run log so the diagnostics screen can hand it to the system
+          share sheet without any storage permission.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!--
+          Test hook driven over adb (see DebugIslandReceiver's KDoc).
+
+          Exported because HyperOS drops an explicit broadcast aimed at a
+          non-exported receiver from a different UID (adb/shell) *silently*: the
+          system logs "Enqueued broadcast" then "completed: result=0" and never
+          runs it, which is indistinguishable from a crash. The receiver is still
+          gated by a signature-level permission, so only adb/shell and apps
+          signed with this key can trigger it.
+        -->
+        <receiver
+            android:name=".island.DebugIslandReceiver"
+            android:exported="true"
+            android:permission="com.dsh.mobile.permission.DEBUG_ISLAND">
+            <intent-filter>
+                <action android:name="com.dsh.mobile.DEBUG_ISLAND" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

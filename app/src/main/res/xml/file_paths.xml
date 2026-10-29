@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paths exposed through the FileProvider used to share the run log.
+
+  Only the app's private external files dir is exposed: the log lives there and
+  nothing else needs to leave the sandbox.
+-->
+<paths>
+    <external-files-path
+        name="run_log"
+        path="." />
+</paths>

@@ -1,0 +1,364 @@
+﻿@media (max-width:900px) and (pointer:coarse) {
+  /* These phone chrome surfaces are opaque; filtering the live wallpaper below
+     them wastes a large compositing pass when the keyboard/focus changes. */
+  [data-dsh-mobile-header],
+  [data-composer-seat] [class$="_card"],
+  [data-dsh-mobile-right], [data-dsh-mobile-right] * {
+    backdrop-filter:none!important; -webkit-backdrop-filter:none!important;
+  }
+  body.dsh-remote-portrait:has([data-dsh-mobile-frame]:is([data-rightbar-fullscreen],:not([data-rightbar-collapsed]))) #dshRemoteWhale {
+    display:none!important; visibility:hidden!important; pointer-events:none!important;
+  }
+  [data-dsh-mobile-center] [class$="_headerActions"] button[aria-label="閺呴缚鍏樻担鎾虫礋闂?] { width:32px!important; min-width:32px!important; padding:0!important; }
+  [data-dsh-mobile-center] [class$="_headerActions"] button[aria-label="閺呴缚鍏樻担鎾虫礋闂?] [class$="_triggerLabel"] { display:none!important; }
+  [data-dsh-mobile-center] [class$="_headerActions"] > * { flex:0 0 auto!important; }
+  [data-conversation-tabs] { position:relative!important; }
+  [data-conversation-tabs] [role="tab"]::after { display:none!important; }
+  .dsh-tab-indicator { position:absolute; left:0; bottom:0; height:2px; background:#4f8cff; border-radius:2px; pointer-events:none; transition:transform 240ms cubic-bezier(.2,0,0,1),width 240ms cubic-bezier(.2,0,0,1); }
+  [data-dsh-mobile-center] [class$="_crumbs"] button { min-width:0!important; max-width:100%!important; overflow:hidden!important; text-overflow:ellipsis!important; white-space:nowrap!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_dock"] > * { flex:0 0 auto!important; }
+
+  html body .we-rope { display:none!important; pointer-events:none!important; }
+  [data-dsh-mobile-header] {
+    display:grid!important; grid-template-columns:minmax(0,1fr) 36px!important;
+    grid-template-rows:minmax(36px,auto)!important; grid-auto-rows:minmax(30px,auto)!important; align-items:center!important;
+    gap:4px 6px!important; padding:6px 10px 0!important; min-width:0!important;
+    position:relative!important; background:rgba(25,27,33,.96)!important;
+  }
+  [data-dsh-mobile-header] [class$="_headerLeading"] { display:none!important; }
+  [data-dsh-mobile-header] [class$="_titleRow"],
+  [data-dsh-mobile-header] [class$="_titleCluster"] { display:contents!important; }
+  [data-dsh-mobile-header] [class$="_crumbs"] {
+    grid-row:1!important; grid-column:1!important; min-width:0!important;
+    padding-left:42px!important; margin:0!important; overflow:hidden!important;
+    white-space:nowrap!important; font-size:14px!important;
+  }
+  [data-dsh-mobile-center] [class$="_crumbs"] > * { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  [data-dsh-mobile-header] [class$="_headerCorner"] {
+    grid-row:1!important; grid-column:2!important; justify-self:end!important; margin:0!important;
+  }
+  [data-dsh-mobile-center] [class$="_headerCorner"] button { min-width:36px!important; min-height:36px!important; }
+  [data-dsh-mobile-header] [class$="_tabs"] {
+    grid-row:2!important; grid-column:1/3!important; width:auto!important; max-width:100%!important;
+    min-width:0!important; overflow-x:auto!important; margin:0!important; padding:0!important;
+  }
+  [data-dsh-mobile-header] [class$="_headerActions"] {
+    grid-row:var(--dsh-header-actions-row,2)!important; grid-column:1/3!important; position:static!important; transform:none!important;
+    translate:none!important; margin:0!important; gap:4px!important; min-width:0!important;
+    width:100%!important; max-width:100%!important; justify-self:stretch!important; align-items:center!important;
+    overflow-x:auto!important; overflow-y:hidden!important; flex-wrap:nowrap!important; scrollbar-width:thin!important;
+  }
+  [data-dsh-mobile-center] [class$="_headerActions"] button {
+    min-height:30px!important; font-size:11px!important; white-space:nowrap!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] { width:100%!important; max-width:100%!important; min-width:0!important; padding:0!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_card"] {
+    width:calc(100% - 20px)!important; max-width:calc(100% - 20px)!important; margin:6px 10px 2px!important;
+    border-radius:18px!important; padding:0!important; box-sizing:border-box!important;
+    background:rgba(31,33,39,.96)!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_scroll"] {
+    padding:8px 12px 2px!important; max-height:min(30dvh,190px)!important; min-height:44px!important;
+    width:100%!important; box-sizing:border-box!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [role="textbox"] { font-size:16px!important; line-height:24px!important; min-height:40px; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_placeholder"] {
+    font-size:14px!important; line-height:24px!important; white-space:nowrap!important;
+    overflow:hidden!important; text-overflow:ellipsis!important; max-width:calc(100% - 24px)!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_row"] {
+    display:flex!important; flex-wrap:nowrap!important; align-items:center!important;
+    gap:6px!important; padding:6px 8px 8px!important; min-height:48px!important; box-sizing:border-box!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_tools"],
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_modes"],
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_trailing"] {
+    display:contents!important; padding:0!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_add"],
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_primary"] {
+    position:static!important; transform:none!important; margin:0!important;
+    width:36px!important; height:36px!important; min-width:36px!important; flex:0 0 36px!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_standardControls"] {
+    flex:1 1 0!important; min-width:0!important; overflow:visible!important;
+  }
+  [data-dsh-mobile-center] [class$="_standardControls"] > * { min-width:0!important; max-width:100%!important; }
+  [data-dsh-mobile-center] [class$="_standardControls"] [class$="_trigger"] {
+    min-width:0!important; max-width:100%!important; height:32px!important;
+    overflow:hidden!important; white-space:nowrap!important; text-overflow:ellipsis!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_activity"] { flex:0 0 32px!important; width:32px!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_activity"] button { min-height:32px!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_dock"] {
+    margin:0 10px!important; padding:3px 0 5px!important; width:auto!important; min-width:0!important;
+    display:flex!important; gap:6px!important; flex-wrap:nowrap!important; overflow-x:auto!important; scrollbar-width:none!important;
+  }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_dock"] button { font-size:10px!important; max-width:100%!important; }
+  [data-dsh-mobile-frame] > [data-dsh-mobile-right] {
+    position:absolute!important; inset:0!important; width:100%!important; height:100%!important;
+    z-index:80!important; visibility:hidden!important; pointer-events:none!important;
+    background:#1e2025!important; opacity:1!important; isolation:isolate!important;
+    contain:layout paint!important;
+    transition:none!important;
+  }
+  [data-dsh-mobile-right][data-dsh-right-moving] { will-change:translate; }
+  /* DockKit's desktop tab-cell slide competes with the phone page slide.
+     Keep the dock content and its opaque surface in the same clipped layer. */
+  [data-dsh-mobile-right-host] {
+    transform:none!important; translate:none!important; transition:none!important; animation:none!important;
+  }
+  [data-dsh-mobile-frame]:has(>[data-dsh-right-moving]) { overflow:clip!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_card"],
+  [data-dsh-mobile-right] button, [role="tab"] { transition:border-color 180ms ease,background-color 180ms ease,box-shadow 180ms ease!important; }
+  [data-dsh-mobile-frame]:is([data-rightbar-fullscreen],:not([data-rightbar-collapsed])) > [data-dsh-mobile-right] {
+    visibility:visible!important; pointer-events:auto!important;
+  }
+  [data-dsh-mobile-right-surface] {
+    position:absolute!important; inset:0!important; width:100%!important; height:100%!important;
+    max-width:100%!important; max-height:100%!important; border-radius:0!important;
+    background:#1e2025!important; z-index:80!important; overflow:hidden!important;
+    animation:none!important; opacity:1!important;
+  }
+  [data-dsh-mobile-right] [class*="_tabHostHeader_"] {
+    min-height:46px!important; flex-shrink:0!important; align-items:center!important;
+    background:#22242b!important;
+  }
+  [data-dsh-mobile-right] [class*="_stripTabs_"] { min-width:0!important; overflow:auto!important; }
+  [data-dsh-mobile-right] [class*="_stripChrome_"] button { min-width:36px!important; min-height:36px!important; }
+  [data-dsh-mobile-right] button[aria-label="閺€鎯版崳閸欏厖鏅舵潏瑙勭埉"]::after { content:'鏉╂柨娲?; font-size:12px; margin-left:4px; }
+  [data-dsh-mobile-right] button[aria-label="閺€鎯版崳閸欏厖鏅舵潏瑙勭埉"] { width:auto!important; padding:4px 10px!important; }
+  [data-dsh-mobile-right] [class*="_tabHostBody_"] { min-height:0!important; overflow:auto!important; }
+  [data-dsh-mobile-right] [class$="_guide"] {
+    justify-content:flex-start!important; align-items:stretch!important; overflow:auto!important;
+    padding:14px 12px!important; gap:10px!important; box-sizing:border-box!important;
+  }
+  [data-dsh-mobile-right] [class$="_guide"] [class$="_entryCell"] { flex:0 0 auto!important; width:100%!important; margin:0!important; }
+  [data-dsh-mobile-right] [class$="_guide"] [class$="_entry"] { min-height:48px!important; height:auto!important; padding:12px 14px!important; }
+  [data-dsh-mobile-menu] { max-width:calc(100vw - 20px)!important; box-sizing:border-box!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_menu"] { max-height:min(65dvh,480px)!important; border-radius:16px!important; padding:8px!important; }
+
+  [data-dsh-mobile-center] [class$="_crumbSeg"] { flex:1 1 auto!important; min-width:0!important; width:100%!important; max-width:100%!important; }
+  [data-dsh-mobile-center] [class*="_crumbCurrent"] { display:block!important; width:100%!important; max-width:100%!important; overflow:hidden!important; text-overflow:ellipsis!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_root"]:has(>[class$="_card"]) { width:100%!important; padding:0!important; min-width:0!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_card"] { gap:0!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_trigger"] { min-height:32px!important; }
+  [data-dsh-mobile-jobs] { position:fixed!important; top:84px!important; left:10px!important; right:10px!important; width:auto!important; max-width:none!important; max-height:calc(100dvh - 100px)!important; overflow:auto!important; z-index:100!important; background:#282b33!important; border-radius:16px!important; }
+  [data-dsh-mobile-jobs] [class$="_menuBody"] { max-height:none!important; padding:6px!important; }
+  [data-dsh-mobile-jobs] button[class*="_row"] { display:grid!important; grid-template-columns:12px minmax(0,1fr) auto!important; gap:4px 8px!important; text-align:left!important; min-height:58px!important; padding:10px 8px!important; align-items:start!important; }
+  [data-dsh-mobile-jobs] [class$="_rowDot"] { grid-column:1!important; grid-row:1/4!important; margin-top:5px!important; }
+  [data-dsh-mobile-jobs] [class$="_kind"] { grid-column:2!important; grid-row:1!important; font-size:11px!important; }
+  [data-dsh-mobile-jobs] [class$="_label"] { grid-column:2!important; grid-row:2!important; min-width:0!important; white-space:normal!important; overflow-wrap:anywhere!important; display:-webkit-box!important; -webkit-line-clamp:2!important; -webkit-box-orient:vertical!important; overflow:hidden!important; max-height:40px!important; }
+  [data-dsh-mobile-jobs] [class$="_status"] { grid-column:2!important; grid-row:3!important; min-width:0!important; white-space:normal!important; font-size:11px!important; }
+  [data-dsh-mobile-jobs] [class$="_duration"] { grid-column:3!important; grid-row:1!important; font-size:11px!important; white-space:nowrap!important; }
+  [data-dsh-mobile-jobs] [class$="_chevronBox"] { grid-column:3!important; grid-row:2/4!important; min-width:32px!important; min-height:32px!important; }
+  [data-dsh-mobile-jobs] [class$="_sectionToggle"], [data-dsh-mobile-jobs] [class$="_sectionClear"] { min-height:32px!important; }
+  [data-dsh-mobile-jobs] pre { max-height:40dvh!important; overflow:auto!important; }
+  [data-dsh-mobile-right] [class$="_subagentHeader"] { min-height:42px!important; gap:8px!important; }
+  [data-dsh-mobile-right] [class$="_subagentSubject"] { min-width:0!important; overflow:hidden!important; text-overflow:ellipsis!important; }
+  [data-dsh-mobile-right] [class$="_teamMembers"], [data-dsh-mobile-right] [class$="_teamActions"] { flex-wrap:wrap!important; gap:6px!important; padding:8px 12px!important; }
+  [data-dsh-mobile-right] [class$="_teamMembers"] button, [data-dsh-mobile-right] [class$="_teamActions"] button { min-height:32px!important; }
+  [data-dsh-mobile-right] [class$="_treeRow"], [data-dsh-mobile-right] [class*="_treeRowActive"] { min-height:48px!important; padding:8px!important; box-sizing:border-box!important; }
+  [data-dsh-mobile-right] [class$="_treeTitle"] { white-space:normal!important; overflow-wrap:anywhere!important; line-height:20px!important; }
+  [data-dsh-mobile-right] [class$="_treeMeta"] { font-size:11px!important; line-height:16px!important; }
+  [data-dsh-mobile-right] [class$="_controls"] { max-width:calc(100% - 16px)!important; flex-wrap:wrap!important; gap:2px!important; }
+  [data-dsh-mobile-right] [class$="_controls"] button { min-height:32px!important; }
+}
+
+@media (prefers-reduced-motion:reduce) { [data-dsh-mobile-right-surface] { animation:none!important; } }
+@media (prefers-reduced-motion:reduce) { .dsh-tab-indicator { transition:none!important; } }
+
+@media (max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-menu] {
+    position:fixed!important; left:10px!important; right:10px!important; top:auto!important; bottom:calc(12px + var(--dsh-ime-offset,0px))!important;
+    width:auto!important; min-width:0!important; max-width:calc(100vw - 20px)!important;
+    max-height:calc(100dvh - 100px)!important; overflow:auto!important; transform:none!important;
+    margin:0!important; padding:8px!important; border-radius:16px!important; background:#2b2e36!important;
+    z-index:2147482500!important; box-sizing:border-box!important;
+  }
+  [data-dsh-mobile-menu] [role^="menuitem"], [data-dsh-mobile-menu] [class$="_cell"], [data-dsh-mobile-menu] [role="option"] { min-height:44px!important; font-size:14px!important; }
+  [data-dsh-mobile-menu] [class$="_cellValue"] { min-width:0!important; overflow:hidden!important; text-overflow:ellipsis!important; }
+}
+
+@media (max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-right] [role="tab"] { min-width:124px!important; max-width:calc(100vw - 120px)!important; }
+  [data-dsh-mobile-right] [class$="_jobsDrawerBody"] { max-height:min(40dvh,300px)!important; overflow:auto!important; padding:4px 8px!important; }
+  [data-dsh-mobile-right] [class$="_jobsRow"] { margin:6px 0!important; border:1px solid rgba(255,255,255,.1)!important; border-radius:12px!important; align-items:start!important; }
+  [data-dsh-mobile-right] [class$="_jobsRowMain"] { display:grid!important; grid-template-columns:10px minmax(0,1fr) auto!important; gap:4px 6px!important; height:auto!important; min-height:82px!important; padding:10px 8px!important; text-align:left!important; white-space:normal!important; }
+  [data-dsh-mobile-right] [class$="_jobsRowMain"] > :nth-child(1) { grid-column:1!important; grid-row:1!important; margin-top:5px!important; }
+  [data-dsh-mobile-right] [class$="_jobsRowMain"] > :nth-child(2) { grid-column:2!important; grid-row:1!important; justify-self:start!important; }
+  [data-dsh-mobile-right] [class$="_jobsRowMain"] > :nth-child(4) { grid-column:3!important; grid-row:1!important; }
+  [data-dsh-mobile-right] [class$="_jobsLabel"] { grid-column:2/4!important; grid-row:2!important; font-size:12px!important; line-height:18px!important; min-width:0!important; white-space:normal!important; overflow-wrap:anywhere!important; display:-webkit-box!important; -webkit-line-clamp:2!important; -webkit-box-orient:vertical!important; overflow:hidden!important; }
+  [data-dsh-mobile-right] [class$="_jobsMeta"] { grid-column:2/4!important; grid-row:3!important; font-size:11px!important; line-height:16px!important; white-space:normal!important; overflow-wrap:anywhere!important; }
+  [data-dsh-mobile-right] [class$="_jobsBigNum"] { display:none!important; }
+  [data-dsh-mobile-right] [class$="_jobsKillSlot"] { align-self:center!important; min-width:32px!important; }
+}
+
+@media (max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-plugin-region] { min-width:0!important; max-width:100%; overflow-wrap:anywhere; }
+  [data-dsh-mobile-plugin-region] pre { max-width:100%; overflow:auto; }
+  [data-dsh-mobile-plugin-region] input, [data-dsh-mobile-plugin-region] textarea,
+  [data-dsh-mobile-plugin-region] select { max-width:100%; box-sizing:border-box; }
+  [data-dsh-mobile-plugin-region] img { max-width:100%; height:auto; }
+  [data-dsh-mobile-tablist] { position:relative; min-width:0; max-width:100%; overflow-x:auto; }
+  [data-dsh-mobile-tablist] > [role="tab"] { flex-shrink:0; }
+}
+
+@media (max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-frame]:not([data-dsh-mobile-has-left]) [data-dsh-mobile-header] [class$="_crumbs"] { padding-left:0!important; }
+  [data-dsh-mobile-dialog] { min-width:0!important; max-width:calc(100vw - 20px)!important; max-height:90dvh!important; overflow:auto!important; box-sizing:border-box!important; }
+  [data-dsh-mobile-stack] { flex-direction:column!important; min-width:0!important; }
+  [data-dsh-mobile-stack] > * { min-width:0!important; max-width:100%!important; flex-shrink:1!important; }
+}
+
+@media (max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-frame] > [data-dsh-mobile-plugin-region]:not([data-dsh-mobile-right]) { grid-column:1/-1!important; min-width:0!important; }
+}
+
+/* Explicit placement avoids implicit rows from optional header utility plugins. */
+@media (max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-header] {
+    grid-template-columns:minmax(0,1fr) minmax(0,auto) 36px!important;
+    grid-template-rows:36px minmax(30px,auto) minmax(30px,auto)!important;
+    grid-auto-rows:minmax(30px,auto)!important; height:auto!important;
+  }
+  [data-dsh-mobile-header] [class$="_crumbs"] { grid-column:1/3!important; }
+  [data-dsh-mobile-header] [class$="_headerCorner"] { grid-column:3!important; }
+  [data-dsh-mobile-header] [class$="_tabs"] { grid-column:1!important; }
+  [data-dsh-mobile-header] [class$="_headerActions"] { grid-column:1/4!important; }
+  [data-dsh-mobile-header] [class$="_headerUtilities"] {
+    grid-row:2!important; grid-column:2/4!important; position:static!important;
+    width:auto!important; max-width:min(42vw,240px)!important; min-width:0!important;
+    overflow-x:auto!important; overflow-y:hidden!important; white-space:nowrap!important;
+    justify-self:end!important; margin:0!important; transform:none!important;
+  }
+  [data-dsh-mobile-header] [class$="_headerUtilities"] > * { flex-wrap:nowrap!important; }
+}
+@media (max-width:900px) and (max-height:500px) and (orientation:landscape) and (pointer:coarse) {
+  [data-dsh-mobile-header] {
+    grid-template-columns:minmax(100px,1fr) minmax(0,1fr) 36px!important;
+    grid-template-rows:32px 30px!important; gap:2px 6px!important; padding:4px 8px 0!important;
+  }
+  [data-dsh-mobile-header] [class$="_crumbs"] { grid-column:1!important; font-size:13px!important; }
+  [data-dsh-mobile-header] [class$="_headerActions"] { grid-row:1!important; grid-column:2!important; }
+  [data-dsh-mobile-header] [class$="_tabs"] { grid-row:2!important; grid-column:1!important; }
+  [data-dsh-mobile-header] [class$="_headerCorner"] button { min-height:32px!important; }
+  [data-dsh-mobile-center] [data-composer-seat] [class$="_scroll"] { min-height:32px!important; max-height:25dvh!important; padding-top:4px!important; }
+  [data-dsh-mobile-center] [data-composer-seat] [role="textbox"] { min-height:28px!important; line-height:22px!important; }
+  [data-dsh-mobile-center] [data-composer-seat] [class$="_row"] { min-height:36px!important; padding-top:2px!important; padding-bottom:4px!important; }
+}
+/* Global rail scrolling + a bounded, independent conversation tree. Works with
+   optional workspace plugins; collapsed rails keep their original layout. */
+[data-dsh-mobile-frame]:not([data-sidebar-collapsed]) [data-dsh-mobile-sidebar-scroll] {
+  overflow-y:auto!important; overflow-x:hidden!important; height:100%!important;
+  min-height:0!important; overscroll-behavior-y:contain; scrollbar-width:thin;
+}
+[data-dsh-mobile-frame]:not([data-sidebar-collapsed]) [data-dsh-mobile-sidebar-scroll] > * { flex-shrink:0!important; }
+[data-dsh-mobile-sidebar-scroll] > [class$="_logoRow"] { order:0!important; }
+[data-dsh-mobile-sidebar-scroll] > [class$="_newSession"] { order:1!important; }
+[data-dsh-mobile-frame]:not([data-sidebar-collapsed]) [data-dsh-mobile-workspace] {
+  order:2!important; flex:0 0 auto!important; height:clamp(240px,45dvh,420px)!important;
+  min-height:240px!important; overflow:hidden!important;
+}
+[data-dsh-mobile-sidebar-scroll] > [class$="_panelList"] { order:3!important; }
+[data-dsh-mobile-sidebar-scroll] > [class$="_footArea"] { order:4!important; }
+[data-dsh-mobile-workspace] :is([role="tree"],[data-workspace-tree],[data-conversations-list]) {
+  overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior-y:auto;
+  min-height:0!important; scrollbar-width:thin; touch-action:pan-y;
+}
+body:has([data-dsh-mobile-frame]) #dshRemoteWhale,
+body:has([data-dsh-mobile-frame]) .we-rope { display:none!important; }
+
+/* Tablet portrait: opt in only when the dock declares its open state. Unknown
+   plugin regions retain their desktop layout instead of becoming an overlay.
+   (Restored: this block governs overlay geometry and must not silently start
+   applying to a 1152px landscape window. The right-rail scroll fix lives in its
+   own media query below, scoped to what it actually needs.) */
+@media (min-width:901px) and (max-width:1100px) and (pointer:coarse) {
+  [data-dsh-mobile-frame]:has(> [data-dsh-mobile-right-contract]) > [data-dsh-mobile-center] { grid-column:2/-1!important; min-width:0!important; }
+  [data-dsh-mobile-frame]:not([data-dsh-mobile-has-left]):has(> [data-dsh-mobile-right-contract]) > [data-dsh-mobile-center] { grid-column:1/-1!important; }
+  [data-dsh-mobile-right-contract]:has([data-sidebar-right-open="true"]) {
+    position:absolute!important; top:0!important; right:0!important; bottom:0!important;
+    width:min(72vw,520px)!important; max-width:calc(100vw - 52px)!important;
+    height:100%!important; min-height:0!important; z-index:60!important;
+    background:#202228!important; backdrop-filter:none!important;
+  }
+  [data-dsh-mobile-right-contract]:not(:has([data-sidebar-right-open="true"])) { display:none!important; }
+  [data-dsh-mobile-right-contract] [data-dsh-mobile-right-surface] {
+    width:100%!important; max-width:100%!important; box-sizing:border-box!important;
+    background:#202228!important;
+  }
+  /* The rail is height:100% but not a scroller, and its surface clips, so an entry
+     list taller than the tablet viewport ended at the bottom edge with no way to
+     reach the rest. Verified by contrast: at 800px wide (this block's sibling
+     max-width:900 rules) the same list scrolls fine, while at the tablet's 1152px
+     it cannot 閳?so the missing piece is here, in the wide branch. Bound the rail
+     and let its content scroll; `display` stays untouched because this element's
+     layout belongs to the plugin dock. */
+  [data-dsh-mobile-right-contract]:has([data-sidebar-right-open="true"]),
+  [data-dsh-mobile-frame] > [data-dsh-mobile-right] {
+    overflow-y:auto!important; overflow-x:hidden!important;
+    overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch;
+    touch-action:pan-y;
+  }
+  [data-dsh-mobile-right] [data-dsh-mobile-right-surface] {
+    max-height:none!important; height:auto!important; min-height:100%!important;
+    overflow-y:auto!important; overflow-x:hidden!important;
+    overscroll-behavior-y:contain; touch-action:pan-y;
+  }
+}
+
+/* A stable navigation entry, independent of the optional remote mascot. */
+.dsh-mobile-sidebar-entry { display:none; }
+@media(max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-frame][data-sidebar-collapsed] > .dsh-mobile-sidebar-entry {
+    display:flex; position:absolute; top:4px; left:4px; z-index:35;
+    width:44px; height:44px; align-items:center; justify-content:center;
+    border:0; border-radius:12px; background:transparent; color:inherit;
+    padding:10px; cursor:pointer; touch-action:manipulation;
+  }
+  .dsh-mobile-sidebar-entry svg { width:24px; height:24px; }
+  .dsh-mobile-sidebar-entry:active { background:rgba(127,127,127,.16); }
+  [data-dsh-mobile-frame][data-dsh-mobile-has-left] [data-dsh-mobile-header] { padding-left:52px!important; }
+}
+
+@media(max-width:900px) and (pointer:coarse) {
+  /* Some plugins force child visibility. Collapsed drawers must hide the entire subtree. */
+  [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar],
+  [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar] * {
+    visibility:hidden!important; pointer-events:none!important;
+  }
+  [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar] { content-visibility:hidden; }
+  body:has([data-dsh-mobile-frame]:not([data-sidebar-collapsed])) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]),
+  body:has([data-dsh-mobile-frame]:not([data-sidebar-collapsed])) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]) *,
+  body:has([data-dsh-mobile-frame][data-dsh-mobile-right-open]) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]) *,
+  body:has([data-dsh-mobile-frame][data-dsh-mobile-right-open]) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]) {
+    visibility:hidden!important; pointer-events:none!important;
+  }
+}
+@media(max-width:1100px) and (pointer:coarse) {
+  [data-dsh-mobile-frame]:not([data-dsh-mobile-right-open]) > [data-dsh-mobile-right],
+  [data-dsh-mobile-frame]:not([data-dsh-mobile-right-open]) > [data-dsh-mobile-right] * {
+    visibility:hidden!important; pointer-events:none!important;
+  }
+}
+
+@media(max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-sidebar-scroll] > [class$="_logoRow"] {
+    position:sticky!important; top:0!important; z-index:3;
+    background:#1e2025!important;
+  }
+  [data-dsh-mobile-sidebar] [class$="_logoRow"] button[aria-label] { min-width:36px;min-height:36px; }
+}
+
+@media(max-width:900px) and (pointer:coarse) {
+  /* Keep fixed controls inside the conversation below the drawer and its shade. */
+  [data-dsh-mobile-center] { isolation:isolate; z-index:0; }
+}
+
+@media(max-width:900px) and (pointer:coarse) {
+  /* Keep the account popover anchored by its owner, with phone-sized hit areas. */
+  [data-dsh-mobile-account-menu] { min-width:188px!important;max-width:calc(100vw - 24px)!important;border-radius:14px!important; }
+  [data-dsh-mobile-account-menu] [role="menuitem"] { min-height:44px!important; padding:10px 12px!important;touch-action:manipulation; }
+}
+
