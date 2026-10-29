@@ -91,4 +91,7 @@ App 没有内置广告或分析 SDK；所用网络方案仍可能连接 Tailscal
 
 - 项目主页：<https://github.com/yiheng-zyh/DSH-Pal>
 - 问题反馈：<https://github.com/yiheng-zyh/DSH-Pal/issues>
+- 开发预览下载：**[Releases](https://github.com/yiheng-zyh/DSH-Pal/releases)** —— 当前为 `0.1.0-alpha.1`，标注 Pre-release，**不是稳定版**，请先读该版本的已知问题
 - 哔哩哔哩：待配置（关于页保留对应位置）
+
+> 从 `0.1.0-alpha.1` 起使用维护者专用发布签名。与更早的 debug 签名测试包**签名不同**，旧测试包不能直接覆盖升级；本版之后的版本可以正常覆盖更新。
