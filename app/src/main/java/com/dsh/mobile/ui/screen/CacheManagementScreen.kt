@@ -1,6 +1,12 @@
 package com.dsh.mobile.ui.screen
 
 import android.webkit.WebView
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import com.dsh.mobile.ui.AppBackHandler as BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,14 +42,16 @@ fun CacheManagementScreen(settings:SettingsStore,webView:WebView?,onBack:()->Uni
     Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background).safeDrawingPadding(),contentAlignment=androidx.compose.ui.Alignment.TopCenter) {
     Column(Modifier.widthIn(max=840.dp).fillMaxSize().padding(20.dp)) {
         AppPageHeader(page.title,onBack={back()})
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            if(page==DataPage.Overview) {
+        AnimatedContent(targetState=page,modifier=Modifier.weight(1f),
+            transitionSpec={(fadeIn(tween(160))+slideInHorizontally(tween(200)){it/24}).togetherWith(fadeOut(tween(100)))},label="data-page") { section ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            if(section==DataPage.Overview) {
                 DataLink("网页资源","更新插件、样式或图片；保留登录",{page=DataPage.Resources})
                 DataLink("页面偏好","当前站点的设置、草稿与本地存储",{page=DataPage.Preferences})
                 DataLink("网页登录与站点数据","单独管理 Cookie 或完整清理",{page=DataPage.Accounts})
                 Text("清理均需确认。连接地址、主题、Tailscale 账号和 WireGuard 配置不会被删除。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
             }
-            if(page==DataPage.Resources) {
+            if(section==DataPage.Resources) {
                 Card {Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Text("资源复用",fontWeight=FontWeight.Medium)
                     Text(WebResourceCache.summary(),fontSize=13.sp)
@@ -53,11 +61,11 @@ fun CacheManagementScreen(settings:SettingsStore,webView:WebView?,onBack:()->Uni
                 Button(onClick=onReload,enabled=!busy,modifier=Modifier.fillMaxWidth()){Text("重新加载页面")}
                 Text("未发送内容会先提醒。仅清资源后，下一次访问需要重新下载。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
             }
-            if(page==DataPage.Preferences) {
+            if(section==DataPage.Preferences) {
                 Text("清理当前地址的本地存储，可能影响草稿、插件设置或网页授权。保留 Cookie、连接记录和原生账号。",fontSize=13.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
                 DataAction(BrowserCleanup.PAGE_PREFERENCES,busy||webView==null){pending=it}
             }
-            if(page==DataPage.Accounts) {
+            if(section==DataPage.Accounts) {
                 Text("配对记录保留，但网页授权被清理后可能需要重新配对。",fontSize=13.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
                 DataAction(BrowserCleanup.COOKIES,busy){pending=it}
                 DataAction(BrowserCleanup.SITE,busy||!full||domain==null){pending=it}
@@ -68,6 +76,7 @@ fun CacheManagementScreen(settings:SettingsStore,webView:WebView?,onBack:()->Uni
             }
             if(busy)Text("正在清理，请稍候…",fontSize=13.sp)
             result?.let {Text(it,fontSize=13.sp)}
+        }
         }
     }
     com.dsh.mobile.ui.ConfirmationDialog(pending!=null,pending?.title.orEmpty()+"？",

@@ -30,14 +30,21 @@ private const val BILIBILI_URL = "https://b23.tv/8o1bX3M"
 fun AboutScreen(onBack:()->Unit) {
     var document by remember {mutableStateOf<Pair<String,String>?>(null)}
     val context=LocalContext.current
-    val text=remember(document){document?.let {runCatching {context.assets.open("licenses/${it.second}").bufferedReader().use {it.readText()}}.getOrDefault("暂时无法读取许可，请导出诊断记录反馈。")}}
+    val text by produceState<String?>(null,document) {
+        value=null
+        val selected=document
+        if(selected!=null)value=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {context.assets.open("licenses/${selected.second}").bufferedReader().use {it.readText()}}
+                .getOrDefault("暂时无法读取许可，请导出诊断记录反馈。")
+        }
+    }
     fun back(){if(document!=null)document=null else onBack()}
     BackHandler {back()}
     Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background).safeDrawingPadding(),contentAlignment=Alignment.TopCenter) {
         Column(Modifier.widthIn(max=840.dp).fillMaxSize().padding(20.dp)) {
             AppPageHeader(document?.first?:"关于",onBack={back()})
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                if(document!=null)SelectionContainer {Text(text.orEmpty(),fontSize=13.sp)}
+                if(document!=null)SelectionContainer {Text(text?:"正在读取许可…",fontSize=13.sp)}
                 else {
                     Column(Modifier.fillMaxWidth().padding(vertical=16.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                         DshBrandMark(80.dp)

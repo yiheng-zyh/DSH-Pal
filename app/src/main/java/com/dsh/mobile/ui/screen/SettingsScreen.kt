@@ -2,10 +2,8 @@ package com.dsh.mobile.ui.screen
 
 import android.content.Intent
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import com.dsh.mobile.ui.motion.rememberTimeline
 import com.dsh.mobile.ui.motion.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -112,26 +110,17 @@ fun SettingsScreen(
     // honest signal is asking NotificationManager whether the record exists.
     var lastPostResult by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val entrance = rememberTimeline(640)
-    fun cardMotion(index: Int) = Modifier.fillMaxWidth().graphicsLayer {
-        val progress = entrance.at(index * 40, index * 40 + 340)
-        alpha = progress
-        translationY = (1f - progress) * 24.dp.toPx()
-    }
+    val pageStates = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
 
     // Probe once on entry, off the main thread (it IPCs into SystemUI).
     androidx.compose.runtime.LaunchedEffect(page) {
         if (page == SettingsPage.NotificationSupport) capability = withContext(Dispatchers.IO) { IslandSupport.probe(context) }
     }
 
-    if(page==SettingsPage.Cache){com.dsh.mobile.ui.BackGestureSurface {CacheManagementScreen(settings,webView,{page=SettingsPage.Home},onReloadPage)};return}
-    if(page==SettingsPage.Logs){com.dsh.mobile.ui.BackGestureSurface {LogSettingsScreen{page=SettingsPage.Diagnostics}};return}
-    if(page==SettingsPage.About){com.dsh.mobile.ui.BackGestureSurface {AboutScreen{page=SettingsPage.Home}};return}
     Box(
         Modifier
             .fillMaxSize()
-            .background(MiuixTheme.colorScheme.background)
-            .safeDrawingPadding(),
+            .background(MiuixTheme.colorScheme.background),
     ) {
         AnimatedContent(
             targetState = page,
@@ -139,7 +128,12 @@ fun SettingsScreen(
             transitionSpec = { (fadeIn(tween(200)) + slideInHorizontally(tween(240)) { it / 16 }).togetherWith(fadeOut(tween(120))) },
             label = "settings-page",
         ) { section ->
-        Column(Modifier.fillMaxSize(),horizontalAlignment=Alignment.CenterHorizontally) {
+        pageStates.SaveableStateProvider(section.name) {
+        if(section==SettingsPage.Cache) com.dsh.mobile.ui.BackGestureSurface {CacheManagementScreen(settings,webView,{page=SettingsPage.Home},onReloadPage)}
+        else if(section==SettingsPage.Logs) com.dsh.mobile.ui.BackGestureSurface {LogSettingsScreen{page=SettingsPage.Diagnostics}}
+        else if(section==SettingsPage.About) com.dsh.mobile.ui.BackGestureSurface {AboutScreen{page=SettingsPage.Home}}
+        else {
+        Column(Modifier.fillMaxSize().safeDrawingPadding(),horizontalAlignment=Alignment.CenterHorizontally) {
             Column(Modifier.widthIn(max=840.dp).fillMaxWidth().padding(horizontal=20.dp,vertical=12.dp)) {
                 AppPageHeader(section.title,if(section==SettingsPage.Home) "DSH Pal ${com.dsh.mobile.BuildConfig.VERSION_NAME}" else null) { if(section==SettingsPage.Home)onBack()else page=parent() }
             }
@@ -196,7 +190,7 @@ fun SettingsScreen(
             }
             // ---- notification capability -----------------------------------
             if (section == SettingsPage.NotificationSupport) {
-            Card(cardMotion(0)) {
+            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("通知与灵动岛", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(10.dp))
@@ -268,7 +262,7 @@ fun SettingsScreen(
             }
             if(section==SettingsPage.NotificationDemo) {
             // ---- test the island end to end --------------------------------
-            Card(cardMotion(1)) {
+            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("跑一遍岛演示", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(6.dp))
@@ -335,7 +329,7 @@ fun SettingsScreen(
             // ---- feature toggles -------------------------------------------
             }
             if (section == SettingsPage.NotificationControls) {
-            Card(cardMotion(2)) {
+            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("显示选项", fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(8.dp))
@@ -445,7 +439,7 @@ fun SettingsScreen(
             // VPN" was invisible until a MESH profile happened to exist — exactly
             // the dead end reported after scanning a Cloudflare code on a fresh
             // install. Unconfigured routes now appear with their own action.
-            Card(cardMotion(1)) {
+            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("切换连接方式", fontWeight = FontWeight.Medium)
                     Text("随时可以换回任意一种方式；已配对的地址会保留登录状态，不用重新扫码。", fontSize = 12.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
@@ -543,6 +537,8 @@ fun SettingsScreen(
                 Text("提交问题时请说明连接方式、网络、发生时间与操作步骤，再附上导出的日志。请勿上传密码或配对链接。",fontSize=13.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
             }
             Spacer(Modifier.height(24.dp))
+        }
+        }
         }
         }
         }

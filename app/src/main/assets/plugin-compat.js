@@ -102,6 +102,7 @@
         var glyphSource=left.querySelector('[data-slot="sidebar.brand.mark"] svg')||sidebarControl.querySelector('svg');
         if(glyphSource) {var glyph=glyphSource.cloneNode(true);glyph.setAttribute('aria-hidden','true');sidebarEntry.append(glyph);} else sidebarEntry.textContent='☰';
         sidebarEntry.addEventListener('click',function(){
+          if(window.__DSH_MOBILE_MOTION__&&__DSH_MOBILE_MOTION__.openLeft){__DSH_MOBILE_MOTION__.openLeft();return;}
           var control=left&&left.querySelector('[class$="_logoRow"] button[aria-label="打开侧边栏"],[class$="_logoRow"] button[aria-label="收起侧边栏"]');
           if(control)control.click();
         });

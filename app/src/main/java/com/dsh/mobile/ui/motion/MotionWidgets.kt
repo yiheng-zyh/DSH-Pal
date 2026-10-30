@@ -67,7 +67,7 @@ fun Modifier.pressScale(
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
-        animationSpec = Motion.snappy(),
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = if (pressed) 60 else 140, easing = Motion.Standard),
         label = "pressScale",
     )
     this.graphicsLayer { scaleX = scale; scaleY = scale }

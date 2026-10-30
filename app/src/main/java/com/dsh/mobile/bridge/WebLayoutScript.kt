@@ -9,13 +9,15 @@ object WebLayoutScript {
     @Volatile private var keyboard: String? = null
     @Volatile private var pageMotion: String? = null
     @Volatile private var compatibility: String? = null
+    @Volatile private var rightMotion: String? = null
 
     fun build(context: Context): String {
         val stylesheet = css ?: context.assets.open("mobile-layout.css").bufferedReader().use { it.readText() }.also { css = it }
         val ime = keyboard ?: context.assets.open("keyboard-motion.js").bufferedReader().use { it.readText() }.also { keyboard = it }
         val motion = pageMotion ?: context.assets.open("page-motion.js").bufferedReader().use { it.readText() }.also { pageMotion = it }
         val compat = compatibility ?: context.assets.open("plugin-compat.js").bufferedReader().use { it.readText() }.also { compatibility = it }
-        return compat + controller + "(" + JSONObject.quote(stylesheet) + ");" + ime + motion + if (com.dsh.mobile.BuildConfig.USB_DEVELOPMENT) usbHotReload else ""
+        val right = rightMotion ?: context.assets.open("phone-right-motion.js").bufferedReader().use { it.readText() }.also { rightMotion = it }
+        return compat + controller + "(" + JSONObject.quote(stylesheet) + ");" + ime + right + motion + if (com.dsh.mobile.BuildConfig.USB_DEVELOPMENT) usbHotReload else ""
     }
 
     private val usbHotReload = """
@@ -141,7 +143,7 @@ object WebLayoutScript {
     if (!frame) return;
     var panel=frame.querySelector(':scope > [data-dsh-mobile-right]');
     var declared=panel&&panel.querySelector('[data-sidebar-right-open]');
-    var open=!!panel && (declared ? declared.getAttribute('data-sidebar-right-open')==='true' : (frame.hasAttribute('data-rightbar-fullscreen') || (frame.hasAttribute('data-rightbar-collapsed') ? false : getComputedStyle(panel).display!=='none')));
+    var open=!!panel && !frame.hasAttribute('data-dsh-right-closed') && (declared ? declared.getAttribute('data-sidebar-right-open')==='true' : (frame.hasAttribute('data-rightbar-fullscreen') || (frame.hasAttribute('data-rightbar-collapsed') ? false : getComputedStyle(panel).display!=='none')));
     frame.toggleAttribute('data-dsh-mobile-right-open',open);
     fixPhoneRightRailGeometry(panel,open);
     if(rightOpen===open&&rightPanel===panel)return;
@@ -192,8 +194,16 @@ object WebLayoutScript {
     frame=next;
     bindTitle();
     syncRight();fixLeftRailScroll();
-    frameObserver=new MutationObserver(function(){syncRight();fixLeftRailScroll();});
-    frameObserver.observe(frame,{attributes:true,subtree:true,childList:true,attributeFilter:['data-rightbar-fullscreen','data-rightbar-collapsed','data-sidebar-right-open','data-sidebar-collapsed','aria-hidden']});
+    frameObserver=new MutationObserver(function(records){
+      // Chat output can mutate hundreds of nodes. Only rail changes affect rail
+      // geometry; keep them immediate so a newly opened phone dock is usable.
+      if(records&&records.length&&!records.some(function(record){
+        return record.target===frame || record.target instanceof Element &&
+          !!record.target.closest('[data-dsh-mobile-sidebar],[data-dsh-mobile-right]');
+      }))return;
+      syncRight();fixLeftRailScroll();
+    });
+    frameObserver.observe(frame,{attributes:true,subtree:true,childList:true,attributeFilter:['data-rightbar-fullscreen','data-rightbar-collapsed','data-sidebar-right-open','data-dsh-right-closed','data-sidebar-collapsed','aria-hidden']});
     log('phone layout ready; optional regions detected');
   }
   function tagMenus(root) {
@@ -210,7 +220,7 @@ object WebLayoutScript {
   }
   function flush() {
     scheduled=false;
-    bindFrame();
+    if(!frame||!frame.isConnected)bindFrame();
     bindTitle();
     pending.forEach(tagMenus); pending.clear();
   }

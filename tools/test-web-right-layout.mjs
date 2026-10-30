@@ -16,7 +16,7 @@ class Element {
  setAttribute(k,v){this.attrs.set(k,v)} getAttribute(k){return this.attrs.get(k)??null}
  hasAttribute(k){return this.attrs.has(k)} removeAttribute(k){this.attrs.delete(k)}
  toggleAttribute(k,on){on?this.attrs.set(k,''):this.attrs.delete(k)}
- matches(){return false} querySelector(){return null} querySelectorAll(){return []} appendChild(){} addEventListener(){}
+ matches(){return false} closest(){return null} querySelector(){return null} querySelectorAll(){return []} appendChild(){} addEventListener(){}
  getBoundingClientRect(){return {width:375}}
 }
 const frame=new Element(),rail=new Element(),pane=new Element(),body=new Element(),host=new Element();
@@ -58,3 +58,19 @@ ctx.matchMedia=q=>({matches:!q.includes('max-width:900px')&&!q.includes('reduced
 assert.equal(scroll.style.getPropertyValue('overflow-y'),'auto','tablet retains nested scrolling');
 scroll.querySelector=()=>null;callback();assert.equal(region.style.getPropertyValue('height'),'25px','plugin removal releases reserved workspace');
 console.log('PASS left rail: phone/tablet nested scroll contract, boundary chaining, collapse and plugin removal restore originals');
+
+let railQueries=0;const query=frame.querySelector;
+frame.querySelector=q=>{railQueries++;return query(q)};
+callback([{target:new Element()}]);
+assert.equal(railQueries,0,'chat mutations must not rescan sidebar geometry');
+callback([{target:frame}]);
+assert.ok(railQueries>0,'frame state changes still reconcile immediately');
+console.log('PASS chat mutations bypass rail scans; drawer state changes stay immediate');
+mobile=true;mounted=true;ctx.matchMedia=q=>({matches:q.includes('reduced')?false:true});
+frame.setAttribute('data-dsh-right-closed','');callback();
+assert.equal(frame.hasAttribute('data-dsh-mobile-right-open'),false,'local close overrides retained plugin-open state');
+assert.equal(rail.style.getPropertyValue('display'),'none','retained rail cannot intercept the conversation');
+frame.removeAttribute('data-dsh-right-closed');callback();
+assert.equal(frame.hasAttribute('data-dsh-mobile-right-open'),true,'retained rail reopens without toggling the plugin');
+assert.equal(rail.style.getPropertyValue('display'),'block');
+console.log('PASS phone right presentation: retained close, touch release and local reopen');

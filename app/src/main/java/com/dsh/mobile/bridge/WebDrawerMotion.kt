@@ -4,6 +4,9 @@ package com.dsh.mobile.bridge
 object WebDrawerMotion {
     val script = """
 ;(function(){
+  // Phone drawers use the compositor motion controller below. A whole-document
+  // snapshot waits for chat commits and adds latency before the first frame.
+  if(matchMedia('(max-width:900px) and (pointer:coarse)').matches)return;
   if(window.top!==window||!document.startViewTransition||!CSS.supports('view-transition-name','dsh-left-drawer'))return;
   if(window.__DSH_SNAPSHOT_DRAWER__)return;
   var mobile=matchMedia('(max-width:900px) and (pointer:coarse)'),reduced=matchMedia('(prefers-reduced-motion:reduce)');

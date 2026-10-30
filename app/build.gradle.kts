@@ -21,9 +21,12 @@ android {
         applicationId = "com.dsh.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.1.0-alpha.2"
+        versionCode = 4
+        versionName = "0.1.0-alpha.3"
         buildConfigField("boolean", "USB_DEVELOPMENT", usbDevelopment.toString())
+        // Inspect the existing route without switching to isolated USB profiles.
+        buildConfigField("boolean", "WEB_INSPECTION", (usbDevelopment ||
+            providers.gradleProperty("dshWebInspection").orNull == "true").toString())
     }
 
     signingConfigs {
@@ -54,7 +57,8 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            isDebuggable = usbDevelopment
+            // Benchmark the USB route with release compilation/profile behavior.
+            isDebuggable = usbDevelopment && providers.gradleProperty("dshBenchmark").orNull != "true"
             isMinifyEnabled = false
             isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")

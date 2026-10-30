@@ -9,8 +9,8 @@
   body.dsh-remote-portrait:has([data-dsh-mobile-frame]:is([data-rightbar-fullscreen],:not([data-rightbar-collapsed]))) #dshRemoteWhale {
     display:none!important; visibility:hidden!important; pointer-events:none!important;
   }
-  [data-dsh-mobile-center] [class$="_headerActions"] button[aria-label="閺呴缚鍏樻担鎾虫礋闂?] { width:32px!important; min-width:32px!important; padding:0!important; }
-  [data-dsh-mobile-center] [class$="_headerActions"] button[aria-label="閺呴缚鍏樻担鎾虫礋闂?] [class$="_triggerLabel"] { display:none!important; }
+  [data-dsh-mobile-center] [class$="_headerActions"] button[aria-label$="个后台任务"] { width:32px!important; min-width:32px!important; padding:0!important; }
+  [data-dsh-mobile-center] [class$="_headerActions"] button[aria-label$="个后台任务"] [class$="_triggerLabel"] { display:none!important; }
   [data-dsh-mobile-center] [class$="_headerActions"] > * { flex:0 0 auto!important; }
   [data-conversation-tabs] { position:relative!important; }
   [data-conversation-tabs] [role="tab"]::after { display:none!important; }
@@ -126,8 +126,8 @@
   }
   [data-dsh-mobile-right] [class*="_stripTabs_"] { min-width:0!important; overflow:auto!important; }
   [data-dsh-mobile-right] [class*="_stripChrome_"] button { min-width:36px!important; min-height:36px!important; }
-  [data-dsh-mobile-right] button[aria-label="閺€鎯版崳閸欏厖鏅舵潏瑙勭埉"]::after { content:'鏉╂柨娲?; font-size:12px; margin-left:4px; }
-  [data-dsh-mobile-right] button[aria-label="閺€鎯版崳閸欏厖鏅舵潏瑙勭埉"] { width:auto!important; padding:4px 10px!important; }
+  [data-dsh-mobile-right] button[aria-label="收起右侧边栏"]::after { content:"返回"; font-size:12px; margin-left:4px; }
+  [data-dsh-mobile-right] button[aria-label="收起右侧边栏"] { width:auto!important; padding:4px 10px!important; }
   [data-dsh-mobile-right] [class*="_tabHostBody_"] { min-height:0!important; overflow:auto!important; }
   [data-dsh-mobile-right] [class$="_guide"] {
     justify-content:flex-start!important; align-items:stretch!important; overflow:auto!important;
@@ -310,8 +310,14 @@ body:has([data-dsh-mobile-frame]) .we-rope { display:none!important; }
 
 /* A stable navigation entry, independent of the optional remote mascot. */
 .dsh-mobile-sidebar-entry { display:none; }
+.dsh-mobile-right-entry { display:none; }
 @media(max-width:900px) and (pointer:coarse) {
-  [data-dsh-mobile-frame][data-sidebar-collapsed] > .dsh-mobile-sidebar-entry {
+  [data-dsh-mobile-frame][data-dsh-right-closed] > .dsh-mobile-right-entry {
+    display:flex;position:absolute;top:4px;right:4px;z-index:70;
+    width:44px;height:44px;align-items:center;justify-content:center;
+    border:0;border-radius:12px;background:#1e2025;color:inherit;padding:10px;
+  }
+  [data-dsh-mobile-frame]:is([data-sidebar-collapsed],[data-dsh-left-closed]) > .dsh-mobile-sidebar-entry {
     display:flex; position:absolute; top:4px; left:4px; z-index:35;
     width:44px; height:44px; align-items:center; justify-content:center;
     border:0; border-radius:12px; background:transparent; color:inherit;
@@ -328,7 +334,7 @@ body:has([data-dsh-mobile-frame]) .we-rope { display:none!important; }
   [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar] * {
     visibility:hidden!important; pointer-events:none!important;
   }
-  [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar] { content-visibility:hidden; }
+  [data-dsh-mobile-frame]:is([data-sidebar-collapsed],[data-dsh-left-closed]) [data-dsh-mobile-sidebar] { content-visibility:hidden; }
   body:has([data-dsh-mobile-frame]:not([data-sidebar-collapsed])) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]),
   body:has([data-dsh-mobile-frame]:not([data-sidebar-collapsed])) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]) *,
   body:has([data-dsh-mobile-frame][data-dsh-mobile-right-open]) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]) *,
@@ -362,3 +368,16 @@ body:has([data-dsh-mobile-frame]) .we-rope { display:none!important; }
   [data-dsh-mobile-account-menu] [role="menuitem"] { min-height:44px!important; padding:10px 12px!important;touch-action:manipulation; }
 }
 
+
+/* Touch controls have deliberate press feedback; chat text remains selectable. */
+@media (pointer:coarse) {
+  button, [role="tab"], [role="menuitem"], [role="treeitem"][class*="_sessionRow"] {
+    -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none; user-select:none;
+    touch-action:manipulation;
+  }
+  button:not(:disabled):active, [role="tab"]:active, [role="menuitem"]:active,
+  [role="treeitem"][class*="_sessionRow"]:active {
+    background-color:rgba(127,127,127,.16);
+  }
+}

@@ -52,7 +52,7 @@ fun DshWebView(
         context.assets.open("web-files.js").bufferedReader().use { it.readText() }.replace("__DSH_FILE_AUTHORITY__", capabilities.exportAuthority) + "\n" +
             context.assets.open("web-media.js").bufferedReader().use { it.readText() } + "\n" + context.assets.open("business-health.js").bufferedReader().use { it.readText() }
     }
-    WebView.setWebContentsDebuggingEnabled(com.dsh.mobile.BuildConfig.USB_DEVELOPMENT)
+    WebView.setWebContentsDebuggingEnabled(com.dsh.mobile.BuildConfig.WEB_INSPECTION)
 
     val webView = remember {
         lateinit var instance: WebView

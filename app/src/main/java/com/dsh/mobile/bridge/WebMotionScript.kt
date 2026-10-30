@@ -10,9 +10,9 @@ object WebMotionScript {
   var mobile = matchMedia('(max-width: 900px) and (pointer: coarse)');
   var reduced = matchMedia('(prefers-reduced-motion: reduce)');
   var frame, side, center, scrim, stateObserver;
-  var closing = null, bypass = false, generation = 0, sideBackup=null;
+  var closing = null, closingFade = null, bypass = false, generation = 0, sideBackup=null;
   var sidebarSelector = '[class*="_sidebarCol"]';
-  var toggleSelector = '[class$="_logoRow"] [class*="_iconButton"]';
+  var toggleSelector = '[class$="_logoRow"] button[class*="_toggle"]';
   var style = document.createElement('style');
   style.id = 'dsh-mobile-motion';
   style.textContent = `
@@ -35,7 +35,7 @@ object WebMotionScript {
       contain:layout;
     }
     [data-dsh-mobile-sidebar][data-dsh-mobile-moving] { will-change:transform; }
-    [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar] {
+    [data-dsh-mobile-frame]:is([data-sidebar-collapsed],[data-dsh-left-closed]) [data-dsh-mobile-sidebar] {
       transform:translate3d(-105%,0,0); pointer-events:none!important; visibility:hidden;
       transition:transform 220ms cubic-bezier(.3,0,.8,.15),visibility 0s 220ms;
     }
@@ -45,7 +45,7 @@ object WebMotionScript {
       opacity:1; visibility:visible; touch-action:none;
       transition:opacity 260ms cubic-bezier(.2,0,0,1),visibility 0s;
     }
-    [data-sidebar-collapsed] > .dsh-mobile-sidebar-scrim {
+    :is([data-sidebar-collapsed],[data-dsh-left-closed]) > .dsh-mobile-sidebar-scrim {
       opacity:0; visibility:hidden; pointer-events:none;
       transition:opacity 220ms ease,visibility 0s 220ms;
     }
@@ -63,7 +63,7 @@ object WebMotionScript {
   function report(message) {
     try { window.DshNative.onBridgeMessage(JSON.stringify({kind:'ui-motion',payload:message})); } catch (_) {}
   }
-  function isOpen() { return frame && side && !frame.hasAttribute('data-sidebar-collapsed'); }
+  function isOpen() { return frame && side && !frame.hasAttribute('data-sidebar-collapsed') && !frame.hasAttribute('data-dsh-left-closed'); }
   function measure(label, duration) {
     var token = ++generation, start = performance.now(), last = start, count = 0, gaps = 0, max = 0;
     var width = center.getBoundingClientRect().width, first = side.getBoundingClientRect().left, middle = first;
@@ -87,38 +87,63 @@ object WebMotionScript {
     if(!sideBackup)return;
     var n=sideBackup.node;
     if(sideBackup.value)n.style.setProperty('background-color',sideBackup.value,sideBackup.priority);else n.style.removeProperty('background-color');
-    n.removeAttribute('data-dsh-mobile-moving');sideBackup=null;
+    n.removeAttribute('data-dsh-mobile-moving');n.inert=false;
+    if(frame)frame.removeAttribute('data-dsh-left-closed');sideBackup=null;
   }
   function sidebarToggle() {
     return side&&(side.querySelector(toggleSelector)||Array.from(side.querySelectorAll('button[aria-label]')).find(function(b){var label=b.getAttribute('aria-label');return !/右|right/i.test(label)&&/侧边栏|sidebar/i.test(label);}));
   }
+  function openLocal(toggle) {
+    if(!frame||!side||!toggle)return;
+    if(window.__DSH_PHONE_RIGHT__)__DSH_PHONE_RIGHT__.close(true);
+    if(closing){closing.cancel();closing=null;if(closingFade){closingFade.cancel();closingFade=null;}}
+    side.inert=false;frame.removeAttribute('data-dsh-left-closed');
+    // Mount the plugin's full sidebar once. Later closes retain that live DOM,
+    // so reopening does not rebuild its workspace tree and conversation rows.
+    if(frame.hasAttribute('data-sidebar-collapsed')){
+      bypass=true;try{toggle.click();}finally{bypass=false;}
+    }else{side.setAttribute('data-dsh-mobile-moving','');measure('open-local',320);}
+  }
   function closeWithMotion(toggle) {
-    if (closing || !toggle) return;
-    if (reduced.matches) { bypass=true; try { toggle.click(); } finally { bypass=false; } return; }
+    if (!toggle) return;
+    if (closing) {
+      var interrupted=closing;closing=null;interrupted.cancel();
+      if(closingFade){closingFade.cancel();closingFade=null;}
+      generation++;side.removeAttribute('data-dsh-mobile-moving');return;
+    }
+    if (reduced.matches) { frame.setAttribute('data-dsh-left-closed','');side.inert=true;return; }
     var currentSide = side;
     currentSide.setAttribute('data-dsh-mobile-moving','');
     closing = currentSide.animate([
       {transform:getComputedStyle(currentSide).transform}, {transform:'translate3d(-105%,0,0)'}
     ], {duration:220,easing:'cubic-bezier(.3,0,.8,.15)',fill:'forwards'});
     var fade = scrim.animate([{opacity:1},{opacity:0}],{duration:220,fill:'forwards'});
+    var animation=closing;closingFade=fade;
     measure('close',220);
-    closing.finished.then(function () {
-      // Let React switch to its rail only after the expanded contents left the screen.
-      if (frame.isConnected && isOpen()) {
-        bypass=true; try { toggle.click(); } finally { bypass=false; }
+    animation.finished.then(function () {
+      // Closing is presentation-only. Keep the plugin content mounted and its
+      // own state intact; no desktop layout mutation or synthetic close click.
+      if (closing===animation && frame.isConnected && isOpen()) {
+        frame.setAttribute('data-dsh-left-closed','');currentSide.inert=true;
       }
     }).catch(function () {}).finally(function () {
       requestAnimationFrame(function () {
-        if (closing) closing.cancel(); closing=null; fade.cancel();
+        animation.cancel();fade.cancel();
+        if(closing===animation){closing=null;closingFade=null;}
       });
     });
   }
   document.addEventListener('click',function (event) {
-    if (bypass || !mobile.matches || !isOpen() || !(event.target instanceof Element)) return;
+    if (bypass || !mobile.matches || !frame || !side || !(event.target instanceof Element)) return;
     var toggle = event.target.closest(toggleSelector) || event.target.closest('button[aria-label]');
     if(toggle&&!toggle.matches(toggleSelector)&&toggle!==sidebarToggle())return;
     if (toggle && side.contains(toggle)) {
-      event.preventDefault(); event.stopImmediatePropagation(); closeWithMotion(toggle);
+      event.preventDefault(); event.stopImmediatePropagation();
+      // Navigation adapters may replay a delayed collapse. It must neither
+      // reverse an in-flight close nor reopen a locally closed drawer.
+      if(!event.isTrusted&&(closing||frame.hasAttribute('data-dsh-left-closed')))return;
+      if(frame.hasAttribute('data-dsh-left-closed'))openLocal(toggle);
+      else if(isOpen()||closing)closeWithMotion(toggle);else openLocal(toggle);
     }
   },true);
 
@@ -149,27 +174,46 @@ object WebMotionScript {
     frame.appendChild(scrim);
     stateObserver=new MutationObserver(function(){
       if (!mobile.matches || !isOpen()) return;
-      var prepared = performance.now(), target = side;
-      target.setAttribute('data-dsh-mobile-moving','');
-      target.style.setProperty('transition','none','important');
-      target.style.setProperty('transform','translate3d(-105%,0,0)','important');
-      target.style.setProperty('visibility','hidden','important');
-      // Separate React's first mount/layout from the compositor animation.
-      // Otherwise its expensive first paint consumes the transition's duration.
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){
-        target.style.removeProperty('transition');
-        target.style.removeProperty('transform');
-        target.style.removeProperty('visibility');
-        if (isOpen()) {
-          report('sidebar prepareMs='+Math.round(performance.now()-prepared));
-          measure('open',320);
-        }
-      }); });
+      // The closed transform is already committed. Let CSS transition directly
+      // to its open position instead of hiding it for two more animation frames.
+      side.setAttribute('data-dsh-mobile-moving','');
+      measure('open',320);
     });
     stateObserver.observe(frame,{attributes:true,attributeFilter:['data-sidebar-collapsed']});
+    // Prepare optional navigation content while idle, off screen. The first
+    // deliberate open then follows the same retained-content path as later ones.
+    if(mobile.matches&&frame.hasAttribute('data-sidebar-collapsed')&&window.requestIdleCallback){
+      var warmFrame=frame,warmSide=side;
+      requestIdleCallback(function(){
+        if(document.hidden||frame!==warmFrame||side!==warmSide||!warmSide.isConnected||
+          !mobile.matches||!frame.hasAttribute('data-sidebar-collapsed'))return;
+        var control=sidebarToggle();if(!control)return;
+        frame.setAttribute('data-dsh-left-closed','');side.inert=true;
+        bypass=true;try{control.click();}finally{bypass=false;}
+      },{timeout:3000});
+    }
     report('sidebar motion ready mobile='+mobile.matches+' reduced='+reduced.matches);
   }
   document.addEventListener('dsh-mobile-capabilities',bind);
+  window.__DSH_MOBILE_MOTION__.isOpen=isOpen;
+  window.__DSH_MOBILE_MOTION__.isClosing=function(){return !!closing;};
+  window.__DSH_MOBILE_MOTION__.openLeft=function(){if(mobile.matches&&side)openLocal(sidebarToggle());};
+  window.__DSH_MOBILE_MOTION__.closeLeft=function(immediate){
+    if(mobile.matches&&immediate&&frame&&side&&!frame.hasAttribute('data-sidebar-collapsed')){
+      if(closing){closing.cancel();closing=null;}if(closingFade){closingFade.cancel();closingFade=null;}
+      generation++;side.removeAttribute('data-dsh-mobile-moving');
+      frame.setAttribute('data-dsh-left-closed','');side.inert=true;return true;
+    }
+    if(mobile.matches&&closing)return true;
+    if(!mobile.matches||!isOpen())return false;closeWithMotion(sidebarToggle());return true;
+  };
+  mobile.addEventListener('change',function(){
+    if(mobile.matches)return;
+    if(closing){closing.cancel();closing=null;}
+    if(closingFade){closingFade.cancel();closingFade=null;}
+    generation++;if(frame)frame.removeAttribute('data-dsh-left-closed');
+    if(side){side.inert=false;side.removeAttribute('data-dsh-mobile-moving');}
+  });
   function start() {
     if (!style.isConnected) document.documentElement.appendChild(style);
     bind();
