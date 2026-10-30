@@ -1,11 +1,13 @@
 (function () {
   if (window.top !== window || window.__DSH_MOBILE_COMPAT__) return;
-  var frame=null,center=null,left=null,right=null,header=null,queued=false,last='',revision=0;
+  var policy=window.__DSH_INTERACTION__;
+  if(policy&&!policy.layoutSupported())return;
+  var frame=null,center=null,left=null,right=null,header=null,queued=false,last='',revision=0,forceNotify=false;
   var samples=[],rightStyles=new WeakMap(),rightContracts=new WeakSet();
   var workspaceRegion=null,workspaceScroll=null,sidebarEntry=null,entrySide=null;
   var mobile=matchMedia('(max-width:900px) and (pointer:coarse)');
   var ignored='[data-dsh-mobile-keep-layout]';
-  function direct(root,selector) { return root && Array.from(root.children).find(function(n){return n.matches(selector)&&!n.matches(ignored);}) || null; }
+  function direct(root,selector) { return root && Array.from(root.children).find(function(n){return n.matches(selector)&&!n.closest(ignored);}) || null; }
   function mark(node,name,on) { if(node)node.toggleAttribute(name,!!on); }
   function report(message) { try { DshNative.onBridgeMessage(JSON.stringify({kind:'ui-layout',payload:message})); } catch(_){} }
   function discover() {
@@ -36,6 +38,8 @@
     frame=found.frame;center=found.center;
     left=direct(frame,'[data-dsh-slot="sidebar"],[class*="_sidebarCol"]');
     right=direct(frame,'[data-dsh-slot="rightbar"],[data-rightbar-col],[class$="_rightbarCol"]');
+    var pane=right&&right.querySelector('[data-sidebar-right-panel]');
+    if(pane&&pane.closest(ignored))right=null;
     // Recognise the official shell header by its structure, not every plugin's _header class.
     header=center&&Array.from(center.querySelectorAll('[data-conversation-header],[class$="_header"]')).find(function(n){
       return !n.closest(ignored)&&n.querySelector('[class$="_crumbs"],[class$="_titleRow"]');
@@ -55,6 +59,7 @@
     // Reserve a real work area only when a tree capability exists. Never guess
     // arbitrary plugin roots or create a blank workspace for missing plugins.
     var nextRegion=left&&left.querySelector('[data-sidebar-workspace],[class$="_regionArea"]');
+    if(nextRegion&&nextRegion.closest(ignored))nextRegion=null;
     if(nextRegion&&!nextRegion.querySelector('[role="tree"],[data-workspace-tree],[data-conversations-list]'))nextRegion=null;
     var nextScroll=nextRegion&&nextRegion.parentElement;
     if(workspaceRegion&&workspaceRegion!==nextRegion)workspaceRegion.removeAttribute('data-dsh-mobile-workspace');
@@ -73,7 +78,8 @@
     // toggle had no target. The contract marker on line 53 still records whether the
     // dock exposes an open/closed state; this attribute only states that a rail is
     // present, which is what the rest of the code actually needs.
-    mark(left,'data-dsh-mobile-sidebar',true);mark(right,'data-dsh-mobile-right',!!right);mark(header,'data-dsh-mobile-header',true);
+    var rightKnown=!!right&&(!policy||policy.rightKnown(frame,right));
+    mark(left,'data-dsh-mobile-sidebar',true);mark(right,'data-dsh-mobile-right',rightKnown);mark(header,'data-dsh-mobile-header',true);
     mark(frame,'data-dsh-mobile-has-left',left);mark(frame,'data-dsh-mobile-has-right',right);
     if(!right&&frame)frame.removeAttribute('data-dsh-mobile-right-open');
     if(header) {
@@ -93,8 +99,10 @@
     // Keep navigation available when the remote plugin's floating mascot is hidden.
     // This is a presentation button; the real React control still owns the action.
     if(sidebarEntry&&(!sidebarEntry.isConnected||entrySide!==left)) {sidebarEntry.remove();sidebarEntry=null;entrySide=null;}
-    if(left&&!sidebarEntry) {
-      var sidebarControl=left.querySelector('[class$="_logoRow"] button[aria-label="打开侧边栏"],[class$="_logoRow"] button[aria-label="收起侧边栏"]');
+    var manageLeft=!!left&&(!policy||policy.left({frame:frame,center:center,left:left,right:right}));
+    if(!manageLeft&&sidebarEntry){sidebarEntry.remove();sidebarEntry=null;entrySide=null;}
+    if(manageLeft&&!sidebarEntry) {
+      var sidebarControl=policy?policy.leftToggle(left):left.querySelector('[class$="_logoRow"] button[aria-label="打开侧边栏"],[class$="_logoRow"] button[aria-label="收起侧边栏"]');
       if(sidebarControl) {
         sidebarEntry=document.createElement('button');entrySide=left;
         sidebarEntry.type='button';sidebarEntry.className='dsh-mobile-sidebar-entry';
@@ -103,14 +111,14 @@
         if(glyphSource) {var glyph=glyphSource.cloneNode(true);glyph.setAttribute('aria-hidden','true');sidebarEntry.append(glyph);} else sidebarEntry.textContent='☰';
         sidebarEntry.addEventListener('click',function(){
           if(window.__DSH_MOBILE_MOTION__&&__DSH_MOBILE_MOTION__.openLeft){__DSH_MOBILE_MOTION__.openLeft();return;}
-          var control=left&&left.querySelector('[class$="_logoRow"] button[aria-label="打开侧边栏"],[class$="_logoRow"] button[aria-label="收起侧边栏"]');
+          var control=policy?policy.leftToggle(left):left&&left.querySelector('[class$="_logoRow"] button[aria-label="打开侧边栏"],[class$="_logoRow"] button[aria-label="收起侧边栏"]');
           if(control)control.click();
         });
         frame.append(sidebarEntry);
       }
     }
-    var state=[!!frame,!!left,!!right,!!header].join('/');
-    var changed=old.some(function(node,i){return node!==[frame,center,left,right,header][i];});
+    var state=[!!frame,!!left,!!right,!!header,rightKnown,manageLeft].join('/');
+    var changed=forceNotify||old.some(function(node,i){return node!==[frame,center,left,right,header][i];});forceNotify=false;
     if(changed||state!==last) {
       revision++;last=state;
       report('compat shell='+!!frame+' left='+!!left+' right='+!!right+' header='+!!header+' revision='+revision);
@@ -150,7 +158,7 @@
   var observer=new MutationObserver(function(records){
     var structural=!frame||!frame.isConnected||!center||!center.isConnected||!!header&&!header.isConnected||!!workspaceRegion&&!workspaceRegion.isConnected||!!workspaceScroll&&!workspaceScroll.isConnected;
     records.forEach(function(record){
-      if(record.type==='attributes') { inspect(record.target);if(record.target===frame||record.target===right||record.target===left||record.target===center||record.target===header)structural=true;return; }
+      if(record.type==='attributes') { inspect(record.target);if(record.attributeName==='data-dsh-mobile-keep-layout'||record.attributeName==='data-dsh-mobile-no-retain'){forceNotify=true;structural=true;}if(record.target===frame||record.target===right||record.target===left||record.target===center||record.target===header)structural=true;return; }
       if(record.target===frame||record.target===center||record.target===header||record.target===right||record.target===left||record.target===workspaceScroll||record.target===workspaceRegion)structural=true;
       if(left&&left.contains(record.target)) {
         Array.from(record.addedNodes).concat(Array.from(record.removedNodes)).forEach(function(node){
@@ -167,7 +175,8 @@
     if(structural)schedule();
   });
   window.__DSH_MOBILE_COMPAT__={snapshot:snapshot,refresh:schedule,measure:measure,samples:samples,summary:function(){return {shell:!!frame,left:!!left,right:!!right,header:!!header,revision:revision,audioCapture:!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia),mediaRecorder:!!window.MediaRecorder,officialUploadHook:!!window.__DSH_FILE_UPLOAD__};}};
-  function start(){refresh();inspect(document.documentElement);observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','aria-hidden','data-rightbar-collapsed','data-rightbar-fullscreen','data-dsh-mobile-keep-layout']});}
+  function start(){refresh();inspect(document.documentElement);observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','aria-hidden','data-rightbar-collapsed','data-rightbar-fullscreen','data-dsh-mobile-keep-layout','data-dsh-mobile-no-retain']});}
   if(document.documentElement)start();else document.addEventListener('DOMContentLoaded',start,{once:true});
   window.addEventListener('resize',schedule);mobile.addEventListener('change',schedule);
+  document.addEventListener('dsh-interaction-policy',function(){forceNotify=true;schedule();});
 })();

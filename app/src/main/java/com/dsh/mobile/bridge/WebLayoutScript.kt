@@ -12,7 +12,7 @@ object WebLayoutScript {
     @Volatile private var rightMotion: String? = null
 
     fun build(context: Context): String {
-        val stylesheet = css ?: context.assets.open("mobile-layout.css").bufferedReader().use { it.readText() }.also { css = it }
+        val stylesheet = css ?: context.assets.open("mobile-layout.css").bufferedReader().use { it.readText() }.trimStart('\uFEFF').also { css = it }
         val ime = keyboard ?: context.assets.open("keyboard-motion.js").bufferedReader().use { it.readText() }.also { keyboard = it }
         val motion = pageMotion ?: context.assets.open("page-motion.js").bufferedReader().use { it.readText() }.also { pageMotion = it }
         val compat = compatibility ?: context.assets.open("plugin-compat.js").bufferedReader().use { it.readText() }.also { compatibility = it }
@@ -28,7 +28,7 @@ object WebLayoutScript {
   function refresh(){
     if(document.hidden||busy)return;busy=true;
     fetch('/__dsh_mobile/layout.css',{cache:'no-store'}).then(function(r){if(!r.ok)throw Error('style unavailable');return r.text()})
-      .then(function(css){var s=document.getElementById('dsh-mobile-layout');if(s&&s.textContent!==css){s.textContent=css;try{DshNative.onBridgeMessage(JSON.stringify({kind:'ui-layout',payload:'USB stylesheet updated'}))}catch(_){}}})
+      .then(function(css){css=css.replace(/^\uFEFF+/,'');var s=document.getElementById('dsh-mobile-layout');if(s&&s.textContent!==css){s.textContent=css;try{DshNative.onBridgeMessage(JSON.stringify({kind:'ui-layout',payload:'USB stylesheet updated'}))}catch(_){}}})
       .catch(function(){}).finally(function(){busy=false});
   }
   setInterval(refresh,1200);refresh();
@@ -38,6 +38,8 @@ object WebLayoutScript {
     private val controller = """
 (function(css) {
   if(window.top!==window)return;
+  css=css.replace(/^\uFEFF+/,'');
+  if(window.__DSH_INTERACTION__&&!__DSH_INTERACTION__.layoutSupported())return;
   if (window.__DSH_MOBILE_LAYOUT__) return;
   window.__DSH_MOBILE_LAYOUT__ = {version:1};
   var frame=null, frameObserver=null, pending=new Set(), scheduled=false;
@@ -187,7 +189,10 @@ object WebLayoutScript {
     rightAnimation.finished.then(function(){rightBypass=true;try{close.click();}finally{rightBypass=false;}}).catch(function(){}).finally(function(){rightClosing=false;});
   },true);
   function bindFrame() {
-    if (frame && frame.isConnected) { syncRight(); fixLeftRailScroll(); return; }
+    if (frame && frame.isConnected && frame.hasAttribute('data-dsh-mobile-frame') && !frame.closest('[data-dsh-mobile-keep-layout]')) { syncRight(); fixLeftRailScroll(); return; }
+    if(frame){restorePhoneRail();restoreLeftRail();frame.removeAttribute('data-dsh-mobile-right-open');}
+    if(frameObserver)frameObserver.disconnect();
+    frame=null;
     var next=document.querySelector('[data-dsh-mobile-frame]');
     if (!next) return;
     if (frameObserver) frameObserver.disconnect();

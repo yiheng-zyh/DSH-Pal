@@ -51,6 +51,7 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
     private val offerPending = java.util.concurrent.atomic.AtomicBoolean(false)
     @JavascriptInterface fun hasPendingTransfer(): Boolean = download != null || upload != null || audio != null
     @JavascriptInterface fun webLayoutMode(): String = com.dsh.mobile.core.SettingsStore(context).webLayoutMode.name
+    @JavascriptInterface fun enhancedInteractions(): Boolean = com.dsh.mobile.core.SettingsStore(context).enhancedInteractions
     @JavascriptInterface fun largeWindow(): Boolean = context.resources.configuration.let { minOf(it.screenWidthDp,it.screenHeightDp)>=600 }
     @JavascriptInterface fun windowWidth(): Int = context.resources.configuration.screenWidthDp
     @JavascriptInterface fun multiWindow(): Boolean {

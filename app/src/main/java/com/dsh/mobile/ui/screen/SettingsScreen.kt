@@ -163,6 +163,11 @@ fun SettingsScreen(
                     }
                 } else Text("预测性返回预览需要 Android 14 或以上；普通返回不受影响。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
                 Spacer(Modifier.height(12.dp))
+                ToggleRow("侧栏交互增强", "保留内容并优化开合；不支持时自动保留原交互。遇到插件冲突可关闭，不清理连接或草稿。", settings.enhancedInteractions) {
+                    settings.enhancedInteractions=it
+                    webView?.evaluateJavascript("window.__DSH_INTERACTION__&&window.__DSH_INTERACTION__.setEnabled($it)",null)
+                }
+                Spacer(Modifier.height(12.dp))
                 Text("网页布局",fontWeight=FontWeight.Medium)
                 var layout by remember {mutableStateOf(settings.webLayoutMode)}
                 com.dsh.mobile.core.WebLayoutMode.entries.forEach {mode ->

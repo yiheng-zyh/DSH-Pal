@@ -7,9 +7,10 @@ object WebDrawerMotion {
   // Phone drawers use the compositor motion controller below. A whole-document
   // snapshot waits for chat commits and adds latency before the first frame.
   if(matchMedia('(max-width:900px) and (pointer:coarse)').matches)return;
-  if(window.top!==window||!document.startViewTransition||!CSS.supports('view-transition-name','dsh-left-drawer'))return;
+  if(window.top!==window||!document.startViewTransition||typeof CSS==='undefined'||typeof CSS.supports!=='function'||!CSS.supports('view-transition-name','dsh-left-drawer'))return;
   if(window.__DSH_SNAPSHOT_DRAWER__)return;
   var mobile=matchMedia('(max-width:900px) and (pointer:coarse)'),reduced=matchMedia('(prefers-reduced-motion:reduce)');
+  var policy=window.__DSH_INTERACTION__;
   var shape=null,scrim=null,transition=null,bypass=false,desired=false,desiredKind="left",generation=0,intents=0;
   var samples=[];
   function report(message){try{DshNative.onBridgeMessage(JSON.stringify({kind:'ui-motion',payload:message}));}catch(_){}}
@@ -21,6 +22,7 @@ object WebDrawerMotion {
   function original(button){bypass=true;try{button.click();}finally{bypass=false;}}
   function settle(){return new Promise(function(resolve){setTimeout(resolve,0);});}
   async function move(button,wanted,kind){
+    if(policy&&!policy.enabled())return;
     kind=kind||"left";desired=wanted;desiredKind=kind;var intent=++intents;
     if(transition||!button||!shape)return;
     if(reduced.matches||document.hidden){original(button);return;}
@@ -142,15 +144,16 @@ object WebDrawerMotion {
     @keyframes dsh-shade-enter{from{opacity:0}to{opacity:1}}
     @keyframes dsh-shade-exit{from{opacity:1}to{opacity:0}}
   `;
-  function start(){if(!style.isConnected)document.documentElement.append(style);bind();}
+  function start(){style.media=policy&&!policy.enabled()?'not all':'';if(!style.isConnected)document.documentElement.append(style);bind();}
   if(document.documentElement)start();else document.addEventListener('DOMContentLoaded',start,{once:true});
   document.addEventListener('click',function(event){
-    if(bypass||!shape||!matchMedia('(max-width:1100px) and (pointer:coarse)').matches||!(event.target instanceof Element))return;
+    if(bypass||policy&&!policy.enabled()||!shape||!matchMedia('(max-width:1100px) and (pointer:coarse)').matches||!(event.target instanceof Element))return;
     var button=event.target.closest('button');
     if(!button||button.closest('[data-dsh-mobile-keep-layout]'))return;
     if(!shape.frame.contains(button))return;
     var label=button.getAttribute('aria-label');
     if((label==='打开右侧边栏'||label==='收起右侧边栏')&&shape.right){
+      if(policy&&!policy.rightKnown(shape.frame,shape.right))return;
       // Phone dock owns its actual open/close event; never swallow or replay it.
       if(mobile.matches)return;
       event.preventDefault();event.stopImmediatePropagation();
@@ -164,6 +167,7 @@ object WebDrawerMotion {
   document.addEventListener('visibilitychange',function(){if(document.hidden&&transition)transition.skipTransition();});
   mobile.addEventListener('change',function(){if(transition)transition.skipTransition();});
   document.addEventListener('dsh-mobile-capabilities',bind);
+  document.addEventListener('dsh-interaction-policy',function(){style.media=policy&&!policy.enabled()?'not all':'';if(policy&&!policy.enabled()){generation++;if(transition)transition.skipTransition();transition=null;document.documentElement.removeAttribute('data-dsh-drawer-transition');}});
   window.__DSH_SNAPSHOT_DRAWER__={samples:samples,closeLeft:function(){
     if(!open()&&!(transition&&desiredKind==='left'))return false;
     move(toggle(),false,'left');return true;

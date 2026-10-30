@@ -78,7 +78,7 @@ function phoneHarness({collapsed=false,idle=false,reduced=false}={}){
  const frame=new Node(),side=new Node(),center=new Node(),toggle=new Node('toggle'),newSession=new Node('new');
  if(collapsed)frame.setAttribute('data-sidebar-collapsed','');
  const document={documentElement:new Node(),createElement:()=>new Node(),addEventListener:(n,f)=>listeners.set(n,f)};
- const context={document,Element:Node,performance,matchMedia:q=>({matches:q.includes('reduced')?reduced:true,addEventListener(){}}),getComputedStyle:()=>({transform:'none'}),MutationObserver:class{observe(){}disconnect(){}},requestAnimationFrame:f=>frames.push(f)};
+ const context={document,Element:Node,performance,setTimeout,clearTimeout,matchMedia:q=>({matches:q.includes('reduced')?reduced:true,addEventListener(){}}),getComputedStyle:()=>({transform:'none'}),MutationObserver:class{observe(){}disconnect(){}},requestAnimationFrame:f=>frames.push(f)};
  context.window=context;context.top=context;context.__DSH_MOBILE_COMPAT__={snapshot:()=>({frame,left:side,center})};
  if(idle)context.requestIdleCallback=f=>idleJobs.push(f);
  vm.runInNewContext(phoneSource,context);

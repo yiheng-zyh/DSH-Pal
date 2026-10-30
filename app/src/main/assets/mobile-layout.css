@@ -1,4 +1,4 @@
-﻿@media (max-width:900px) and (pointer:coarse) {
+@media (max-width:900px) and (pointer:coarse) {
   /* These phone chrome surfaces are opaque; filtering the live wallpaper below
      them wastes a large compositing pass when the keyboard/focus changes. */
   [data-dsh-mobile-header],
@@ -102,7 +102,7 @@
     contain:layout paint!important;
     transition:none!important;
   }
-  [data-dsh-mobile-right][data-dsh-right-moving] { will-change:translate; }
+  [data-dsh-mobile-right][data-dsh-right-moving] { will-change:transform,translate; }
   /* DockKit's desktop tab-cell slide competes with the phone page slide.
      Keep the dock content and its opaque surface in the same clipped layer. */
   [data-dsh-mobile-right-host] {
@@ -169,6 +169,8 @@
 @media (prefers-reduced-motion:reduce) { .dsh-tab-indicator { transition:none!important; } }
 
 @media (max-width:900px) and (pointer:coarse) {
+  [data-dsh-mobile-frame]:not([data-dsh-mobile-has-left]):not([data-dsh-mobile-has-right]) { grid-template-columns:minmax(0,1fr)!important; }
+  [data-dsh-mobile-frame]:not([data-dsh-mobile-has-left]):not([data-dsh-mobile-has-right]) > [data-dsh-mobile-center] { grid-column:1/-1!important; }
   [data-dsh-mobile-menu] {
     position:fixed!important; left:10px!important; right:10px!important; top:auto!important; bottom:calc(12px + var(--dsh-ime-offset,0px))!important;
     width:auto!important; min-width:0!important; max-width:calc(100vw - 20px)!important;
@@ -330,11 +332,11 @@ body:has([data-dsh-mobile-frame]) .we-rope { display:none!important; }
 
 @media(max-width:900px) and (pointer:coarse) {
   /* Some plugins force child visibility. Collapsed drawers must hide the entire subtree. */
-  [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar],
-  [data-dsh-mobile-frame][data-sidebar-collapsed] [data-dsh-mobile-sidebar] * {
+  [data-dsh-left-managed][data-sidebar-collapsed] [data-dsh-mobile-sidebar],
+  [data-dsh-left-managed][data-sidebar-collapsed] [data-dsh-mobile-sidebar] * {
     visibility:hidden!important; pointer-events:none!important;
   }
-  [data-dsh-mobile-frame]:is([data-sidebar-collapsed],[data-dsh-left-closed]) [data-dsh-mobile-sidebar] { content-visibility:hidden; }
+  [data-dsh-left-managed]:is([data-sidebar-collapsed],[data-dsh-left-closed]) [data-dsh-mobile-sidebar] { content-visibility:hidden; }
   body:has([data-dsh-mobile-frame]:not([data-sidebar-collapsed])) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]),
   body:has([data-dsh-mobile-frame]:not([data-sidebar-collapsed])) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]) *,
   body:has([data-dsh-mobile-frame][data-dsh-mobile-right-open]) [class$="_dockFallback"]:has([data-dsh-bottom-toggle]) *,

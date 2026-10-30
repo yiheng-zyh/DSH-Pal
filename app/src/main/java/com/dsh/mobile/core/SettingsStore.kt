@@ -33,6 +33,10 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean("predictive_back", false)
         set(value) { prefs.edit { putBoolean("predictive_back", value) } }
 
+    var enhancedInteractions: Boolean
+        get() = prefs.getBoolean("enhanced_interactions", true)
+        set(value) { prefs.edit { putBoolean("enhanced_interactions", value) } }
+
     var usbStaticPreview:Boolean
         get()=com.dsh.mobile.BuildConfig.USB_DEVELOPMENT && prefs.getBoolean("dev_usb_static_preview",false)
         set(value){if(com.dsh.mobile.BuildConfig.USB_DEVELOPMENT)prefs.edit {putBoolean("dev_usb_static_preview",value)}}

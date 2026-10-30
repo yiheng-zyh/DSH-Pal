@@ -1,5 +1,6 @@
 (function () {
   if(window.top!==window)return;
+  if(window.__DSH_INTERACTION__&&!__DSH_INTERACTION__.layoutSupported())return;
   if(window.__DSH_PAGE_MOTION__)window.__DSH_PAGE_MOTION__.dispose();
   var mobile=matchMedia('(max-width:900px) and (pointer:coarse)');
   var rows=new Map(),scheduled=false,disposed=false;

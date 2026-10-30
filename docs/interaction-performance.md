@@ -51,3 +51,8 @@ python tools/extract-ui-baseline.py <private-art-profile.txt> app/src/main/basel
 ```
 
 过滤脚本仅输出应用界面和实际运行过的界面库规则，不收集会话、URL、凭据或设备标识。更新 Compose、Miuix 或大量原生界面实现后重新采集；构建后确认 APK 内 `assets/dexopt/baseline.prof` 和 `baseline.profm` 有效。ProfileInstaller 安装配置与 ART 编译完成是不同阶段，测量时应记录实际编译状态。
+
+
+## 2026-10-30 alpha.4 兼容补充
+
+侧栏增强共用能力与所有权检测，设置的外观页可即时关闭；未知结构保留原交互，动态退出恢复原控件与触摸。动画缺失、异常和超时均有功能回退；插件可通过 data-dsh-mobile-no-retain 退出内容保留，或 data-dsh-mobile-keep-layout 退出布局。详见 plugin-compatibility.md。修复 CSS BOM 导致第一段媒体样式未生效，并加入加载与语法检查防护。当前覆盖一台手机及隔离组合，不能据此承诺任意插件与系统均已通过。此轮只更新本地，两份仓库独立提交，未推送 GitHub；悬浮助手与公告功能仍为后续需求。

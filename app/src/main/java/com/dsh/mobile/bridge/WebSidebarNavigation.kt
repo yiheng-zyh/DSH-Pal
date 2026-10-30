@@ -6,6 +6,7 @@ object WebSidebarNavigation {
 ;(function(){
   if(window.top!==window||window.__DSH_SIDEBAR_NAV__)return;
   var mobile=matchMedia('(max-width:900px) and (pointer:coarse)');
+  var policy=window.__DSH_INTERACTION__;
   var protectUntil=0,allowUntil=0,face=null,menuAnchor=null;
   function report(message){try{DshNative.onBridgeMessage(JSON.stringify({kind:'ui-layout',payload:message}));}catch(_){}}
   function shape(){return window.__DSH_MOBILE_COMPAT__&&__DSH_MOBILE_COMPAT__.snapshot();}
@@ -20,6 +21,7 @@ object WebSidebarNavigation {
     if(!api||typeof api.toggleSidebar!=='function'||face&&api.toggleSidebar===face.wrapper)return;
     var original=api.toggleSidebar;
     var wrapper=function(){
+      if(policy&&!policy.enabled())return original.apply(this,arguments);
       if(protecting()){report('sidebar verified collapse ignored; account menu owns anchor');return;}
       var s=shape(),motion=window.__DSH_MOBILE_MOTION__;
       if(mobile.matches&&s&&s.frame&&motion&&
@@ -32,7 +34,7 @@ object WebSidebarNavigation {
     if(!expanded(s))return;
     allowUntil=performance.now()+600;
     if(window.__DSH_MOBILE_MOTION__&&__DSH_MOBILE_MOTION__.closeLeft&&__DSH_MOBILE_MOTION__.closeLeft())return;
-    var toggle=s.left.querySelector('[class$="_logoRow"] button[class*="_toggle"],[class$="_logoRow"] button[aria-label="收起侧边栏"],[class$="_logoRow"] button[aria-label="Close sidebar"]');
+    var toggle=policy?policy.leftToggle(s.left):s.left.querySelector('[class$="_logoRow"] button[class*="_toggle"],[class$="_logoRow"] button[aria-label="收起侧边栏"],[class$="_logoRow"] button[aria-label="Close sidebar"]');
     if(toggle){report('sidebar close; reason='+(reason||'navigation'));if(window.__DSH_SNAPSHOT_DRAWER__&&__DSH_SNAPSHOT_DRAWER__.closeLeft){__DSH_SNAPSHOT_DRAWER__.closeLeft();}else toggle.click();}
   }
   function navigation(button,s){
@@ -44,10 +46,10 @@ object WebSidebarNavigation {
       !!button.closest('[class*="_sessionRow"]')&&!button.closest('[class*="_rowActions"]');
   }
   function clicked(event){
-    if(!mobile.matches||!(event.target instanceof Element))return;
+    if(!mobile.matches||policy&&!policy.enabled()||!(event.target instanceof Element))return;
     var s=shape();if(!expanded(s))return;
     var button=event.target.closest('button,a,[role="treeitem"][class*="_sessionRow"]'),a=account(s);
-    var isToggle=button&&s.left.contains(button)&&(button.matches('[class$="_logoRow"] button[class*="_toggle"]')||/^(打开侧边栏|收起侧边栏|Open sidebar|Close sidebar)$/.test(button.getAttribute('aria-label')||''));
+    var isToggle=button&&s.left.contains(button)&&(policy?button===policy.leftToggle(s.left):button.matches('[class$="_logoRow"] button[class*="_toggle"]')||/^(打开侧边栏|收起侧边栏|Open sidebar|Close sidebar)$/.test(button.getAttribute('aria-label')||''));
     if(event.target.closest('.dsh-drawer-scrim,.dsh-mobile-sidebar-scrim')||isToggle&&event.isTrusted){
       allowUntil=performance.now()+600;return;
     }
