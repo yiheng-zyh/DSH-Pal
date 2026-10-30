@@ -24,6 +24,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 /** Project URLs for the public repository. */
 private const val PROJECT_URL = "https://github.com/yiheng-zyh/DSH-Pal"
 private const val ISSUE_URL = "https://github.com/yiheng-zyh/DSH-Pal/issues"
+private const val BILIBILI_URL = "https://b23.tv/8o1bX3M"
 
 @Composable
 fun AboutScreen(onBack:()->Unit) {
@@ -47,7 +48,7 @@ fun AboutScreen(onBack:()->Unit) {
                         Text("项目与社区")
                         Text("GitHub 项目 · "+PROJECT_URL,fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant,modifier=Modifier.clickable{runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(PROJECT_URL)))}})
                         Text("问题反馈 / Issue · "+ISSUE_URL,fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant,modifier=Modifier.clickable{runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(ISSUE_URL)))}})
-                        Text("哔哩哔哩 · 待配置",fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
+                        Text("哔哩哔哩 · 演示视频",fontSize=14.sp,color=MiuixTheme.colorScheme.onBackgroundVariant,modifier=Modifier.clickable{runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(BILIBILI_URL)))}})
                         Text("当前可从支持与诊断导出问题日志。",fontSize=12.sp)
                     }}
                     listOf("应用许可" to "APP-LICENSE.txt","第三方说明与角色署名" to "THIRD-PARTY.txt","DSHgo · MIT" to "DSHgo-MIT.txt","Tailscale · BSD" to "TAILSCALE.txt","Go · BSD" to "GO.txt").forEach {entry ->
