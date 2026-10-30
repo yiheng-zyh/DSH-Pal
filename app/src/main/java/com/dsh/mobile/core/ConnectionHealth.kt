@@ -8,6 +8,7 @@ import kotlin.coroutines.resume
 
 data class Reachability(val status: Int? = null, val elapsedMs: Long = 0, val error: String? = null) {
     val reachable: Boolean get() = status != null && status < 500 && status != 429
+    val measured: Boolean get() = status != null || error !in setOf(null,"context-changed","browser-not-ready","probe-unavailable")
 }
 class HealthWindow(private val size: Int = 10) {
     private val samples = ArrayDeque<Boolean>()
@@ -16,9 +17,15 @@ class HealthWindow(private val size: Int = 10) {
     val failurePercent get() = if (samples.size < 3) null else samples.count { !it } * 100 / samples.size
 }
 object RecoveryPolicy {
+    fun retryablePageFailure(message:String?):Boolean = message != null && (
+        Regex("^HTTP (429|5[0-9]{2})$").matches(message) ||
+        message.contains("ERR_TIMED_OUT") || message.contains("ERR_CONNECTION_RESET") ||
+        message.contains("ERR_CONNECTION_CLOSED") || message.contains("ERR_CONNECTION_REFUSED") ||
+        message.contains("ERR_NETWORK_CHANGED") || message.startsWith("页面未能启动")
+    )
     fun delayMs(failures: Int): Long = longArrayOf(1_000,2_000,4_000,8_000,15_000,30_000)[failures.coerceIn(0,5)]
-    fun canReload(connected: Boolean, reachable: Boolean, authLost: Boolean, busy: Boolean, disconnectedMs: Long, sinceReloadMs: Long): Boolean =
-        !connected && reachable && !authLost && !busy && disconnectedMs >= 20_000 && sinceReloadMs >= 60_000
+    fun canReload(connected: Boolean, reachable: Boolean, authLost: Boolean, busy: Boolean, disconnectedMs: Long, sinceReloadMs: Long, attempts: Int = 0, loadingResources: Int = 0): Boolean =
+        attempts < 2 && loadingResources == 0 && !connected && reachable && !authLost && !busy && disconnectedMs >= 20_000 && sinceReloadMs >= 60_000
 }
 object HealthProbe {
     fun resetConnections() { client.connectionPool.evictAll() }

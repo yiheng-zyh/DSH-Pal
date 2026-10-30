@@ -165,6 +165,13 @@ class DshBridge(
                 }
             }
             "dismiss-keyboard" -> post { listener?.onDismissKeyboard() }
+            "page-probe-result" -> {
+                val data=parsed.optJSONObject("payload") ?: return
+                val id=data.optString("id")
+                val status=data.optInt("status").takeIf {it in 100..599}
+                val result=com.dsh.mobile.core.Reachability(status,data.optLong("elapsedMs").coerceIn(0,60_000),data.optString("error").takeIf {it.isNotBlank() && it!="null"})
+                post {pageProbeCallbacks.remove(id)?.invoke(result)}
+            }
             "quick-reply-result" -> {
                 val data=parsed.optJSONObject("payload") ?: return
                 val id=data.optString("id");val outcome=data.optString("outcome")
@@ -325,6 +332,27 @@ class DshBridge(
     }
 
     private var quickSource: String? = null
+    private val pageProbeCallbacks = mutableMapOf<String,(com.dsh.mobile.core.Reachability)->Unit>()
+    private var pageProbeSource:String?=null
+    suspend fun checkPageReachability():com.dsh.mobile.core.Reachability = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        val id=java.util.UUID.randomUUID().toString()
+        continuation.invokeOnCancellation {main.post {pageProbeCallbacks.remove(id)}}
+        main.post {
+            if(!continuation.isActive)return@post
+            val view=webViewProvider()
+            val profile=profileProvider()
+            if(view==null || profile==null || profile.id!=boundProfileId) {
+                continuation.resumeWith(Result.success(com.dsh.mobile.core.Reachability(error="browser-not-ready")))
+                return@post
+            }
+            val source=pageProbeSource ?: runCatching {view.context.assets.open("browser-probe.js").bufferedReader().use {it.readText()}}.getOrNull()?.also {pageProbeSource=it}
+            if(source==null){continuation.resumeWith(Result.success(com.dsh.mobile.core.Reachability(error="probe-unavailable")));return@post}
+            pageProbeCallbacks[id]={result->if(continuation.isActive)continuation.resumeWith(Result.success(result))}
+            view.evaluateJavascript(source+";window.__DSH_PROBE_PAGE__("+JSONObject.quote(profile.baseUrl)+","+JSONObject.quote(id)+")",null)
+            main.postDelayed({pageProbeCallbacks.remove(id)?.invoke(com.dsh.mobile.core.Reachability(elapsedMs=14_000,error="browser-probe-timeout"))},14_000)
+        }
+    }
+
     private val quickCallbacks = mutableMapOf<String,(String)->Unit>()
     fun captureQuickContext(callback:(String?)->Unit) {
         val view=webViewProvider();val profile=profileProvider()?.id

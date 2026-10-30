@@ -89,7 +89,7 @@ fun DshMobileApp(
     var switchSeconds by remember { mutableStateOf(0) }
     var switchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     LaunchedEffect(switching) {switchSeconds=0;while(switching){kotlinx.coroutines.delay(1000);switchSeconds++}}
-    fun switchConnection(target:com.dsh.mobile.core.ConnectionProfile, commit:()->Unit) {
+    fun switchConnection(target:com.dsh.mobile.core.ConnectionProfile, browserFirst:Boolean=false, commit:()->Unit) {
         if(switching)return
         val previous=settings.activeProfile
         switching=true
@@ -100,7 +100,7 @@ fun DshMobileApp(
                 com.dsh.mobile.core.ConnectionSwitch.run(target,previous,
                     prepare={com.dsh.mobile.vpn.VpnController.prepareNavigation(it){stage->if(stage!=switchStage){switchStage=stage;com.dsh.mobile.core.RunLog.info("Connection","stage=$stage")}}},
                     probe={switchStage="正在测试电脑 DSH 是否响应";com.dsh.mobile.core.ConnectionProbe.check(it)},
-                    commit=commit,
+                    commit=commit, browserFirst=browserFirst,
                     progress={stage->if(stage!=switchStage){switchStage=stage;com.dsh.mobile.core.RunLog.info("Connection","stage=$stage")}})
                 com.dsh.mobile.core.RunLog.info("Connection","switch committed kind=${target.kind} target=${target.id.take(8)}")
             } catch(error:kotlinx.coroutines.CancellationException) {
@@ -186,7 +186,7 @@ fun DshMobileApp(
         // path requires.
         runCatching { settings.rememberConnection(url,label,target.kind,provider) }
             .onFailure { com.dsh.mobile.core.RunLog.warn("Connection","route not remembered ${it.javaClass.simpleName}") }
-        switchConnection(target) {settings.saveConnection(url,label,target.kind,provider);applyConnection(url)}
+        switchConnection(target,browserFirst=com.dsh.mobile.core.MeshPairing.token(url)!=null) {settings.saveConnection(url,label,target.kind,provider);applyConnection(url)}
     }
     fun navigate(action: () -> Unit) {
         val view = activeWebView

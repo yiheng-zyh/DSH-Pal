@@ -38,9 +38,13 @@ object ConnectionSwitch {
         probe:suspend (ConnectionProfile)->ProbeResult,
         commit:()->Unit,
         progress:(String)->Unit = {},
+        browserFirst:Boolean = false,
     ) {
         try {
             prepare(target)
+            // A fresh explicit pairing link must be redeemed by Chromium itself.
+            // An unrelated native probe cannot veto a route the browser can open.
+            if(browserFirst){progress("通道已准备，正在由网页验证配对");commit();return}
             var result = probe(target)
             var attempt = 1
             while (result.outcome !in usable && worthRetrying(result.outcome) && attempt < PROBE_ATTEMPTS) {

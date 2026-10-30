@@ -65,4 +65,17 @@ class ConnectionSwitchTest {
         }catch(expected:IllegalStateException){}
         assertFalse(probed)
     }
+    @Test fun freshPairingIsVerifiedByBrowserWithoutANativeProbe()=runBlocking {
+        val events=mutableListOf<String>()
+        ConnectionSwitch.run(public,mesh,{events+="prepare"},{fail("Native probe must not gate pairing");ProbeResult(ProbeOutcome.NETWORK_ERROR)},{events+="open-browser"},browserFirst=true)
+        assertEquals(listOf("prepare","open-browser"),events)
+    }
+    @Test fun browserFirstStillRequiresTransportPreparationAndRollback()=runBlocking {
+        val prepared=mutableListOf<ConnectionProfile>()
+        try {
+            ConnectionSwitch.run(public,mesh,{prepared+=it;if(it==public)error("transport unavailable")},{fail("Unexpected probe");ProbeResult(ProbeOutcome.NETWORK_ERROR)},{fail("Unexpected commit")},browserFirst=true)
+            fail("Must propagate preparation failure")
+        }catch(expected:IllegalStateException){}
+        assertEquals(listOf(public,mesh),prepared)
+    }
 }

@@ -37,7 +37,7 @@ object WebResourceCache {
         load.reset()
     }
 
-    fun summary(): String = "本次运行：本地复用 ${hits.get()} 次，校验复用 ${validations.get()} 次，下载 ${downloads.get()} 次，复用资源体积 %.1f MB".format(savedBytes.get() / 1048576.0)
+    fun summary(): String = "页面资源默认由浏览器缓存管理。USB资源实验统计：本地复用 ${hits.get()} 次，校验复用 ${validations.get()} 次，下载 ${downloads.get()} 次，复用资源体积 %.1f MB".format(savedBytes.get() / 1048576.0)
     private fun record(message: String) {
         val bytes = Regex("bytes=(\\d+)").find(message)?.groupValues?.get(1)?.toLongOrNull() ?: 0
         // The id identifies one transfer; `receiving` repeats a running total.
@@ -101,7 +101,12 @@ object WebResourceCache {
         }.build()
 
     fun intercept(context: Context, origin: String, request: WebResourceRequest, navigation: Long): WebResourceResponse? {
-        if (com.dsh.mobile.BuildConfig.USB_DEVELOPMENT && com.dsh.mobile.core.DevelopmentTransport.isUsbOrigin(origin)) return null
+        // Production navigation must use Chromium end-to-end. A synchronous
+        // OkHttp cache miss used to hold WebView's request for up to 120 seconds,
+        // then repeat it in Chromium on failure, with different TLS/cookie/SW state.
+        // Keep the alternate transport only for the explicit USB asset experiment.
+        if (!com.dsh.mobile.core.SettingsStore(context).usbStaticPreview) return null
+        if (com.dsh.mobile.core.DevelopmentTransport.isUsbOrigin(origin)) return null
         val url = request.url.toString()
         if (!StaticResourceCache.eligible(origin, url, request.method, request.isForMainFrame, request.requestHeaders)) return null
         return runCatching {

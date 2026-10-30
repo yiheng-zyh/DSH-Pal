@@ -23,7 +23,14 @@
       var elapsed=performance.now()-start;
       if(kind==='api'){
         if(error){if(error.name!=='AbortError')record(false);}
-        else{var ok=response.status>=200&&response.status<400;record(ok);if(ok){lastSuccess=performance.now();lastLatency=Math.round(elapsed);}}
+        else{
+          var endpoint=new URL(raw,location.href).pathname;
+          // Older servers lack the optional changes summary. Its absence is a
+          // capability limit, not a broken connection or a reason to reload chat.
+          var optional=/^\/(?:remote\/)?api\/changes\.summary$/.test(endpoint)&&[404,405,501].includes(response.status);
+          if(optional){if(restricted.size<100)restricted.add(endpoint);}
+          else{restricted.delete(endpoint);var ok=response.status>=200&&response.status<400;record(ok);if(ok){lastSuccess=performance.now();lastLatency=Math.round(elapsed);}}
+        }
       }else if(kind==='plugin'){
         var endpoint=new URL(raw,location.href).pathname;
         if(response&&(response.status===401||response.status===403)){if(restricted.size<100)restricted.add(endpoint);}

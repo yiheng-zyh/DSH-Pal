@@ -48,9 +48,9 @@ object BridgeScript {
   var MAX_FRAME = 65536;
   var taskSockets = new Set();
   window.__DSH_MOBILE_RECONNECT__ = function(){
-    var count=0;
-    taskSockets.forEach(function(ws){if(ws.readyState===0||ws.readyState===1){try{ws.close(4002,'network-reconnect');count++;}catch(_){}}});
-    window.dispatchEvent(new Event('online'));return count;
+    // The page owns socket timeouts and retry. A native health sample may lag
+    // behind an opening/live socket; closing it here caused handshake starvation.
+    window.dispatchEvent(new Event('online'));return taskSockets.size;
   };
 
   function clip(s) {

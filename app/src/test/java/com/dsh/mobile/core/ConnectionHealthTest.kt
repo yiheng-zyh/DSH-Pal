@@ -68,4 +68,19 @@ class ConnectionHealthTest {
         assertFalse(RecoveryPolicy.canReload(false,true,false,false,19_999,60_000))
         assertFalse(RecoveryPolicy.canReload(false,true,false,false,30_000,59_999))
     }
+    @Test fun automaticReloadStopsAfterTwoAttemptsAndWaitsForResources() {
+        assertTrue(RecoveryPolicy.canReload(false,true,false,false,30_000,60_000,attempts=1))
+        assertFalse(RecoveryPolicy.canReload(false,true,false,false,30_000,60_000,attempts=2))
+        assertFalse(RecoveryPolicy.canReload(false,true,false,false,30_000,60_000,loadingResources=1))
+    }
+    @Test fun missingBrowserContextIsNotAConnectivityFailureSample() {
+        assertFalse(Reachability(error="context-changed").measured)
+        assertFalse(Reachability(error="browser-not-ready").measured)
+        assertTrue(Reachability(error="timeout").measured)
+        assertTrue(Reachability(status=401).measured)
+    }
+    @Test fun onlyTransientMainPageFailuresCanRetryWithoutProbeContext() {
+        for(message in listOf("HTTP 503","HTTP 429","net::ERR_TIMED_OUT","net::ERR_NETWORK_CHANGED"))assertTrue(RecoveryPolicy.retryablePageFailure(message))
+        for(message in listOf(null,"HTTP 401","HTTP 403","HTTP 404","配对凭据已失效","页面运行出错，可打开设置查看日志"))assertFalse(RecoveryPolicy.retryablePageFailure(message))
+    }
 }

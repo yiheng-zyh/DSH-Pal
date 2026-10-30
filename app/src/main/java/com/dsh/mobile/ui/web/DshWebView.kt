@@ -173,6 +173,7 @@ fun DshWebView(
         }
 
         com.dsh.mobile.core.RunLog.info("WebView", "preparing url=$url")
+        com.dsh.mobile.core.RunLog.info("WebView", "resource transport=Chromium; native cache only for explicit USB resource experiment")
 
         // Inject BEFORE any page script runs. This is the only hook that reliably
         // beats the harness's own boot code: the page opens its WebSocket while
@@ -261,6 +262,12 @@ fun DshWebView(
                 errorResponse: android.webkit.WebResourceResponse?,
             ) {
                 super.onReceivedHttpError(view, request, errorResponse)
+                if (request != null && !request.isForMainFrame) {
+                    val path=request.url.path.orEmpty()
+                    if(path.endsWith(".js") || path.endsWith(".css") || path.endsWith("/plugins/")) {
+                        com.dsh.mobile.core.RunLog.warn("WebView", "resource HTTP ${errorResponse?.statusCode}; path=${path.take(140)}; query excluded")
+                    }
+                }
                 if (request?.isForMainFrame == true) {
                     // Before the plugin's service worker installs, '/' still belongs
                     // to desktop browser authentication. The paired landing accepts

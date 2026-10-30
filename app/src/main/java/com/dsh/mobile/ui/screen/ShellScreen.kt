@@ -144,6 +144,7 @@ fun ShellScreen(
     var authLost by remember { mutableStateOf(false) }
     var disconnectedAt by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime()) }
     var lastAutoReload by remember { mutableStateOf(-60_000L) }
+    var autoReloadAttempts by remember(loadUrl) { mutableStateOf(0) }
     var lastNudge by remember { mutableStateOf(-30_000L) }
     val healthWindow = remember(loadUrl, network.revision) { com.dsh.mobile.core.HealthWindow() }
     val usbRoute = settings.activeProfile?.kind == com.dsh.mobile.core.ConnectionProfile.Kind.USB
@@ -174,37 +175,47 @@ fun ShellScreen(
                 socketConnected = false
                 delay(1_000); continue
             }
-            val result = com.dsh.mobile.core.HealthProbe.check(settings.baseUrl)
-            endpoint = result
-            healthWindow.record(result.reachable)
+            if(webViewRef==null){delay(500);continue}
+            val result = bridge.checkPageReachability()
+            if(result.measured) endpoint = result
+            // A separate native HEAD timeout must not overrule live browser traffic.
+            val browserHealthy = pageLoaded && socketConnected && business.verified
+            if (browserHealthy) autoReloadAttempts = 0
+            if(result.measured || browserHealthy) healthWindow.record(result.reachable || browserHealthy)
             probeFailures = healthWindow.failurePercent
-            failures = if (result.reachable) 0 else failures + 1
+            failures = if (result.reachable || browserHealthy) 0 else if(result.measured) failures + 1 else failures
             val route = if (usb) "USB" else network.transport
             val now = android.os.SystemClock.elapsedRealtime()
-            if (socketConnected && !business.recoveryNeeded) { disconnectedAt = 0; if (result.reachable) { loadError = null; authLost = false } }
+            if (socketConnected) { disconnectedAt = 0; if (result.reachable) { loadError = null; authLost = false } }
             else if (disconnectedAt == 0L) disconnectedAt = now
-            com.dsh.mobile.core.RunLog.info("Network", "health reachable=${result.reachable} http=${result.status} error=${result.error} rttMs=${result.elapsedMs} socket=$socketConnected samples=${healthWindow.count} failurePercent=${healthWindow.failurePercent}")
-            val needsRecovery = !socketConnected || business.recoveryNeeded
+            com.dsh.mobile.core.RunLog.info("Network", "browser health reachable=${result.reachable} http=${result.status} error=${result.error} rttMs=${result.elapsedMs} socket=$socketConnected samples=${healthWindow.count} failurePercent=${healthWindow.failurePercent}")
+            // Optional/API faults must not tear down a live task channel or visible chat.
+            val needsRecovery = !socketConnected
             if (needsRecovery && disconnectedAt == 0L) disconnectedAt = now
-            if (settings.autoReconnect && needsRecovery && result.reachable && !authLost) {
+            val failedPageCanRetry = mainDocumentFailed && network.available && com.dsh.mobile.core.RecoveryPolicy.retryablePageFailure(loadError)
+            if (settings.autoReconnect && needsRecovery && (result.reachable || failedPageCanRetry) && !authLost) {
                 if (!socketConnected && now - lastNudge >= 10_000) {
                     lastNudge = now
                     webViewRef?.evaluateJavascript("window.__DSH_MOBILE_RECONNECT__ && window.__DSH_MOBILE_RECONNECT__()", null)
                     com.dsh.mobile.core.RunLog.info("Connection", "requested page-owned channel reconnect; no task replay")
                 }
-                if (com.dsh.mobile.core.RecoveryPolicy.canReload(!needsRecovery, true, authLost, false, now-disconnectedAt, now-lastAutoReload) && (pageLoaded || mainDocumentFailed)) {
+                if (com.dsh.mobile.core.RecoveryPolicy.canReload(!needsRecovery, true, authLost, task.isLive, now-disconnectedAt, now-lastAutoReload, autoReloadAttempts, business.loadingResources) && (pageLoaded || mainDocumentFailed)) {
                     val view = webViewRef
                     if (view != null) com.dsh.mobile.ui.web.hasUnsavedDraft(view) { draft ->
                         view.evaluateJavascript("!!(window.__DSH_NATIVE_ACTIVITY__ && window.__DSH_NATIVE_ACTIVITY__.busy()) || !!(window.DshFiles && DshFiles.hasPendingTransfer()) || !!(window.__DSH_PENDING_WRITES__ && window.__DSH_PENDING_WRITES__()) || Array.from(document.querySelectorAll('input[type=file]')).some(x=>x.files && x.files.length)") { busy ->
-                            if (!draft && busy == "false" && (!socketConnected || business.recoveryNeeded) && settings.autoReconnect && appVisible && view.isAttachedToWindow && com.dsh.mobile.core.WebFilePolicy.sameOrigin(view.url.orEmpty(), settings.baseUrl)) {
+                            if (!draft && busy == "false" && !task.isLive && business.loadingResources == 0 && autoReloadAttempts < 2 && !socketConnected && settings.autoReconnect && appVisible && view.isAttachedToWindow && com.dsh.mobile.core.WebFilePolicy.sameOrigin(view.url.orEmpty(), settings.baseUrl)) {
+                                autoReloadAttempts++
                                 lastAutoReload = android.os.SystemClock.elapsedRealtime()
-                                loadError = null; loadAttempt++
+                                mainDocumentFailed = false; loadError = null; loadAttempt++
                                 com.dsh.mobile.core.RunLog.info("Connection", "safe automatic reload; no draft or transfer")
                                 com.dsh.mobile.ui.web.reloadPairedPage(view)
                             } else com.dsh.mobile.core.RunLog.info("Connection", "automatic reload deferred; preserving input or active transfer")
                         }
                     }
                 }
+            }
+            if (autoReloadAttempts >= 2 && !pageLoaded && loadError == null && mainDocumentFailed) {
+                loadError = "自动恢复未成功，已暂停刷新；可重试或在设置中检查连接日志"
             }
             if (socketConnected) reconnectAttempts = 0 else reconnectAttempts++
             delay(if (socketConnected && result.reachable) 12_000 else com.dsh.mobile.core.RecoveryPolicy.delayMs(maxOf(failures,reconnectAttempts)))
@@ -347,7 +358,8 @@ fun ShellScreen(
     LaunchedEffect(loadUrl, loadAttempt) {
         delay(LOAD_TIMEOUT_MS)
         if (loadError == null && !pageLoaded) {
-            loadError = "加载超时（${LOAD_TIMEOUT_MS / 1000} 秒内无响应）"
+            mainDocumentFailed = true
+            loadError = "页面未能启动（${LOAD_TIMEOUT_MS / 1000} 秒），请检查连接日志或重试"
             com.dsh.mobile.core.RunLog.warn("Connection", "load timeout; progress=$progress socket=$socketConnected")
         }
     }
@@ -387,7 +399,9 @@ fun ShellScreen(
                         onWebViewCreated(wv)
                     },
                     onProgress = { progress = it },
-                    onLoadStarted = { mainDocumentFailed=false; pageLoaded=false; loadError=null },
+                    // Some WebView versions report main HTTP failure before onPageStarted.
+                    // Do not erase that failure and leave the loading cover spinning.
+                    onLoadStarted = { pageLoaded=false },
                     onLoadSettled = { error ->
                         loadError = error
                         if(error?.startsWith("配对凭据已失效")==true)authLost=true
@@ -456,6 +470,8 @@ fun ShellScreen(
                                         // Reset the liveness flag so the watchdog
                                         // can fire again if this attempt also hangs.
                                         pageLoaded = false
+                                        mainDocumentFailed = false
+                                        autoReloadAttempts = 0
                                         loadAttempt++
                                         com.dsh.mobile.core.RunLog.info("Connection", "retry attempt=$loadAttempt")
                                         webViewRef?.let { com.dsh.mobile.ui.web.reloadPairedPage(it) }
