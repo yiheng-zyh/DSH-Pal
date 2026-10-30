@@ -2,8 +2,8 @@
 <exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_tailscale.xml" />
 <exclude domain="sharedpref" path="dsh_mobile_vpn_index_tailscale.xml" />
 <exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_wireguard.xml" />
-<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" /></cloud-backup><device-transfer><exclude domain="file" path="tailscale/" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" /><exclude domain="sharedpref" path="dsh_overlay_draft.xml" /></cloud-backup><device-transfer><exclude domain="file" path="tailscale/" />
 <exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_tailscale.xml" />
 <exclude domain="sharedpref" path="dsh_mobile_vpn_index_tailscale.xml" />
 <exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_wireguard.xml" />
-<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" /></device-transfer></data-extraction-rules>
+<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" /><exclude domain="sharedpref" path="dsh_overlay_draft.xml" /></device-transfer></data-extraction-rules>

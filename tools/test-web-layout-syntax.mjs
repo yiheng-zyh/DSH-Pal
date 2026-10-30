@@ -6,7 +6,7 @@ for(const file of ['WebDrawerMotion.kt','WebLayoutScript.kt','WebMotionScript.kt
  for(const [,script] of raw.matchAll(/"""([\s\S]*?)"""/g)){new vm.Script(script,{filename:file});count++;}
 }
 if(count!==6)throw Error('Expected six layout/drawer JavaScript fragments');
-for(const file of ['page-motion.js','plugin-compat.js','phone-right-motion.js']) {
+for(const file of ['page-motion.js','plugin-compat.js','phone-right-motion.js','quick-composer.js']) {
  new vm.Script(fs.readFileSync(new URL('../app/src/main/assets/'+file,import.meta.url),'utf8'),{filename:file});
 }
 // A broken quoted selector used to discard the entire mobile stylesheet in

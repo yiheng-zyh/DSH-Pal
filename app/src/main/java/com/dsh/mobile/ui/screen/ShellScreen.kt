@@ -298,6 +298,12 @@ fun ShellScreen(
         }
     }
 
+    DisposableEffect(bridge,service) {
+        val owner=service
+        owner?.companionBridge=bridge
+        onDispose {if(owner?.companionBridge===bridge)owner.companionBridge=null}
+    }
+
     // Answers typed in the notification shade. The service forwards them as an
     // effect because only this screen owns the WebView, and therefore the only
     // authenticated path back to the harness.

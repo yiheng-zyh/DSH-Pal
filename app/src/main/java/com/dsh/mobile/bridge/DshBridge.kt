@@ -165,6 +165,11 @@ class DshBridge(
                 }
             }
             "dismiss-keyboard" -> post { listener?.onDismissKeyboard() }
+            "quick-reply-result" -> {
+                val data=parsed.optJSONObject("payload") ?: return
+                val id=data.optString("id");val outcome=data.optString("outcome")
+                post {quickCallbacks.remove(id)?.invoke(outcome)}
+            }
             "page-title" -> {
                 val title = parsed.optString("payload").trim().take(180)
                 if (title.isNotBlank()) post { listener?.onSessionTitle(title) }
@@ -317,6 +322,42 @@ class DshBridge(
         calls.set(0)
         dropped.set(0)
         post { taskSockets.reset(); listener?.onSocketState(false) }
+    }
+
+    private var quickSource: String? = null
+    private val quickCallbacks = mutableMapOf<String,(String)->Unit>()
+    fun captureQuickContext(callback:(String?)->Unit) {
+        val view=webViewProvider();val profile=profileProvider()?.id
+        if(view==null || profile==null || profile!=boundProfileId){callback(null);return}
+        val source=quickSource ?: runCatching {view.context.assets.open("quick-composer.js").bufferedReader().use {it.readText()}}.getOrNull()?.also {quickSource=it}
+        if(source==null){callback(null);return}
+        view.evaluateJavascript(source+";window.__DSH_QUICK_COMPOSER__.context()") { result ->
+            val c=runCatching {JSONObject(result)}.getOrNull()
+            callback(if(c!=null && profileProvider()?.id==profile) JSONObject().put("profile",profile).put("context",c).toString() else null)
+        }
+    }
+    fun stageQuickDraft(text:String,callback:(String)->Unit) {
+        val view=webViewProvider()
+        if(view==null || profileProvider()?.id!=boundProfileId){callback("context-changed");return}
+        val source=quickSource ?: runCatching {view.context.assets.open("quick-composer.js").bufferedReader().use {it.readText()}}.getOrNull()?.also {quickSource=it}
+        if(source==null){callback("no-composer");return}
+        view.requestFocus()
+        val id=java.util.UUID.randomUUID().toString()
+        quickCallbacks[id]=callback
+        view.evaluateJavascript(source+";window.__DSH_QUICK_COMPOSER__.stage("+JSONObject.quote(text)+").then(function(outcome){DshNative.onBridgeMessage(JSON.stringify({kind:'quick-reply-result',payload:{id:"+JSONObject.quote(id)+",outcome:outcome}}))})",null)
+        main.postDelayed({quickCallbacks.remove(id)?.invoke("timeout")},3000)
+    }
+    fun submitQuick(text:String,token:String,callback:(String)->Unit) {
+        val saved=runCatching {JSONObject(token)}.getOrNull()
+        val view=webViewProvider();val profile=profileProvider()?.id
+        if(view==null || saved==null || profile==null || saved.optString("profile")!=profile || profile!=boundProfileId){callback("context-changed");return}
+        val source=quickSource ?: runCatching {view.context.assets.open("quick-composer.js").bufferedReader().use {it.readText()}}.getOrNull()?.also {quickSource=it}
+        if(source==null){callback("no-composer");return}
+        val id=java.util.UUID.randomUUID().toString()
+        quickCallbacks[id]=callback
+        val literal=JSONObject.quote(text);val idLiteral=JSONObject.quote(id)
+        view.evaluateJavascript(source+";window.__DSH_QUICK_COMPOSER__.submit("+literal+","+saved.getJSONObject("context").toString()+","+idLiteral+").then(function(outcome){DshNative.onBridgeMessage(JSON.stringify({kind:'quick-reply-result',payload:{id:"+idLiteral+",outcome:outcome}}))})",null)
+        main.postDelayed({quickCallbacks.remove(id)?.invoke("timeout")},3000)
     }
 
     /**

@@ -59,6 +59,9 @@ class DshLiveService : Service() {
 
     /** Lazily created; owns the MediaSession that backs the media-island channel. */
     private var media: MediaIsland? = null
+    private var companion: com.dsh.mobile.overlay.FloatingCompanion? = null
+    var companionBridge: com.dsh.mobile.bridge.DshBridge? = null
+    var pendingOverlayDraft: String? = null
 
     /** Latest projected state, observed by the Compose UI. */
     private val _state = MutableStateFlow(TaskState())
@@ -98,6 +101,10 @@ class DshLiveService : Service() {
 
         scope.launch { probeCapability() }
         scope.launch { observeStateForNotifications() }
+        companion = com.dsh.mobile.overlay.FloatingCompanion(this, settings) {companionBridge}
+        scope.launch { state.collectLatest { companion?.submit(it) } }
+        scope.launch { com.dsh.mobile.core.NetworkConnectivity.visible.collectLatest { companion?.reconcile() } }
+        companion?.reconcile()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -128,6 +135,7 @@ class DshLiveService : Service() {
     }
 
     override fun onDestroy() {
+        companion?.dispose(); companion = null
         unsubscribePreferences?.invoke(); unsubscribePreferences = null
         instances.value = null
         instance = null
@@ -142,6 +150,12 @@ class DshLiveService : Service() {
         media = null
         scope.cancel()
         super.onDestroy()
+    }
+
+    fun refreshCompanion() { scope.launch { companion?.reconcile() } }
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        companion?.configurationChanged()
     }
 
     // ---- public surface ------------------------------------------------------
@@ -313,6 +327,7 @@ class DshLiveService : Service() {
     }
 
     private suspend fun reconcilePreferences() {
+        companion?.reconcile()
         RunLog.info("Notification", "preferences applied island=${settings.islandEnabled} progress=${settings.notificationEnabled} background=${settings.backgroundLive}")
         updateNotification(_state.value)
     }

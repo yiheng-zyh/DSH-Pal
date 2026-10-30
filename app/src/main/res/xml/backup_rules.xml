@@ -2,4 +2,4 @@
 <exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_tailscale.xml" />
 <exclude domain="sharedpref" path="dsh_mobile_vpn_index_tailscale.xml" />
 <exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_wireguard.xml" />
-<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" /></full-backup-content>
+<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" /><exclude domain="sharedpref" path="dsh_overlay_draft.xml" /></full-backup-content>

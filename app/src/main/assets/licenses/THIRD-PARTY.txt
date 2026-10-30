@@ -65,3 +65,8 @@
 - DSHgo 参考实现：MIT，完整文本见 third_party/DSHgo-MIT-LICENSE。
 - Tailscale 内核与 Go：BSD，完整文本见 third_party/tailscale-bindings/LICENSE-TAILSCALE 和 LICENSE-GO。
 - WireGuard Android tunnel：Apache-2.0，来源 https://git.zx2c4.com/wireguard-android。
+
+
+悬浮助手角色：whale_companion.png 直接复用已收录的 improved-1.png；来源 fornarwhal/deepseek-whale-girl-icon，角色上善无形，DeepSeek二创 ZipZipPipe，修复 QYQCAMIAO。素材按 CC BY-NC-SA 4.0 署名、非商业性使用、相同方式共享，详见项目 THIRD_PARTY_LICENSES.md。
+
+贴壁形态 whale_companion_peek.png：以同一原图 AI 辅助调整探头姿势，角色与修复署名同上；衍生素材同样以 CC BY-NC-SA 4.0 共享。

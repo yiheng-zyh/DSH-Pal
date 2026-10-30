@@ -5,11 +5,12 @@
 
 ## 内嵌图像素材
 
-### 鲸鱼娘 Q 版形象（应用图标）
+### 鲸鱼娘 Q 版形象（应用图标与悬浮助手）
 
 - **文件**：`app/src/main/res/mipmap-*/ic_launcher*.png`、
-  `app/src/main/res/drawable-*/ic_launcher_fg.png`、`app/src/main/res/drawable-*/ic_notification.png`
-- **生成方式**：由 `tools/make_icons.py` 从同一张原图按 Android 各密度切出
+  `app/src/main/res/drawable-*/ic_launcher_fg.png`、`app/src/main/res/drawable-*/ic_notification.png`、
+  `app/src/main/res/drawable-nodpi/whale_companion.png`、`whale_companion_peek.png`
+- **生成方式**：图标由 `tools/make_icons.py` 从同一张原图按 Android 各密度切出；悬浮助手直接使用 `art/improved-1.png`，未重绘角色；贴壁探头图由该原图经 AI 辅助调整姿势，沿用角色署名与 CC BY-NC-SA 4.0 素材协议
 - **素材来源**：[fornarwhal/deepseek-whale-girl-icon](https://github.com/fornarwhal/deepseek-whale-girl-icon)
 - **授权**：**CC BY-NC-SA 4.0**（署名 — 非商业性使用 — 相同方式共享）
 - **署名**：

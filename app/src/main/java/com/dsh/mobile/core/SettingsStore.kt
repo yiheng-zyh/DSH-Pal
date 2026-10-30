@@ -33,6 +33,54 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean("predictive_back", false)
         set(value) { prefs.edit { putBoolean("predictive_back", value) } }
 
+    fun observeOverlayPreferences(onChanged: () -> Unit): () -> Unit {
+        val listener=SharedPreferences.OnSharedPreferenceChangeListener { _,key -> if(key?.startsWith("overlay_")==true) onChanged() }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    fun setOverlayPosition(x: Float, y: Float) {
+        prefs.edit { putFloat("overlay_x",x.coerceIn(0f,1f));putFloat("overlay_y",y.coerceIn(0f,1f)) }
+    }
+    var overlayPeekOnEdge: Boolean
+        get() = prefs.getBoolean("overlay_peek_on_edge", true)
+        set(value) { prefs.edit { putBoolean("overlay_peek_on_edge",value);if(!value)putBoolean("overlay_docked",false) } }
+    var overlayDocked: Boolean
+        get() = overlayPeekOnEdge && prefs.getBoolean("overlay_docked", false)
+        set(value) { prefs.edit { putBoolean("overlay_docked",value) } }
+    fun setOverlayDock(x: Float, y: Float, docked: Boolean) {
+        prefs.edit { putFloat("overlay_x",x.coerceIn(0f,1f));putFloat("overlay_y",y.coerceIn(0f,1f));putBoolean("overlay_docked",docked) }
+    }
+    var overlayEnabled: Boolean
+        get() = prefs.getBoolean("overlay_enabled", false)
+        set(value) { prefs.edit { putBoolean("overlay_enabled", value) } }
+    var overlayPanelWidth: Int
+        get() = prefs.getInt("overlay_panel_width",280).coerceIn(180,360)
+        set(value) { prefs.edit {putInt("overlay_panel_width",value.coerceIn(180,360))} }
+    var overlayFontSize: Int
+        get() = prefs.getInt("overlay_font_size",12).coerceIn(10,16)
+        set(value) { prefs.edit {putInt("overlay_font_size",value.coerceIn(10,16))} }
+    var overlayPanelTransparency: Int
+        get() = prefs.getInt("overlay_panel_transparency",8).coerceIn(0,80)
+        set(value) { prefs.edit {putInt("overlay_panel_transparency",value.coerceIn(0,80))} }
+    var overlaySize: Int
+        get() = prefs.getInt("overlay_size", 88).coerceIn(64, 120)
+        set(value) { prefs.edit { putInt("overlay_size", value.coerceIn(64, 120)) } }
+    var overlayDetail: Int
+        get() = prefs.getInt("overlay_detail", 1).coerceIn(0, 2)
+        set(value) { prefs.edit { putInt("overlay_detail", value.coerceIn(0, 2)) } }
+    var overlayShowTitle: Boolean
+        get() = prefs.getBoolean("overlay_show_title", false)
+        set(value) { prefs.edit { putBoolean("overlay_show_title", value) } }
+    var overlayExpanded: Boolean
+        get() = prefs.getBoolean("overlay_expanded", true)
+        set(value) { prefs.edit { putBoolean("overlay_expanded", value) } }
+    var overlayX: Float
+        get() = prefs.getFloat("overlay_x", 1f).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 1f
+        set(value) { prefs.edit { putFloat("overlay_x", value.coerceIn(0f, 1f)) } }
+    var overlayY: Float
+        get() = prefs.getFloat("overlay_y", .35f).takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: .35f
+        set(value) { prefs.edit { putFloat("overlay_y", value.coerceIn(0f, 1f)) } }
+
     var enhancedInteractions: Boolean
         get() = prefs.getBoolean("enhanced_interactions", true)
         set(value) { prefs.edit { putBoolean("enhanced_interactions", value) } }

@@ -127,6 +127,10 @@ async function check(sources,mediaSource){
     assert('stalled left animation has a bounded functional close',lf.hasAttribute('data-dsh-left-closed')&&ls.inert);
     w=await mount(rightMarkup);let stalled=w.document.querySelector('[data-sidebar-right-open]');stalled.setAttribute('data-sidebar-right-open','true');await pause(550);w.document.querySelector('aside').animate=()=>({finished:new Promise(()=>{}),cancel(){}});w.__DSH_PHONE_RIGHT__.close();await pause(600);
     assert('stalled right animation has a bounded functional close',!!w.document.querySelector('[data-dsh-right-closed]'));
+    w=await mount('<title>Initial fixture session — DeepSeek Harness</title><div class="test_frame" data-dsh-frame>'+center+'</div>');
+    assert('session title publishes without optional breadcrumb plugin',w.__compatLogs.includes('Initial fixture session'));
+    w.document.querySelector('title').outerHTML='<title>Replacement fixture session — DeepSeek Harness</title>';await pause(100);
+    assert('replacement title node updates native task metadata',w.__compatLogs.includes('Replacement fixture session'));
     // Contract stubs run in the device engine; no audio or upload network is generated.
     const events=[],calls=[];let response={ok:true,status:200};let rejected;
     const stream={getAudioTracks:()=>[{}]};

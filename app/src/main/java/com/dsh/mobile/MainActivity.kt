@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
      * already held a valid base URL. The shell keys its state on this counter.
      */
     private var settingsRevision by mutableStateOf(0)
+    private var workspaceRevision by mutableStateOf(0)
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -62,6 +63,11 @@ class MainActivity : ComponentActivity() {
                 maybeStartTracker(startService = true)
             }
         }
+
+    override fun onResume() {
+        super.onResume()
+        DshLiveService.current()?.refreshCompanion()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Swap the launch theme for the normal one before anything is drawn: the
@@ -77,6 +83,7 @@ class MainActivity : ComponentActivity() {
         keyboardInsetsBridge = com.dsh.mobile.ui.web.KeyboardInsetsBridge(window) { webViewRef }
 
         settings = SettingsStore(this)
+        if(intent.action=="com.dsh.mobile.OPEN_WORKSPACE")workspaceRevision++
         handleStaticPreviewIntent(intent)
         RunLog.info("Activity", "created instance=${System.identityHashCode(this)} restored=${savedInstanceState != null}")
         handleDeepLink(intent)
@@ -87,21 +94,40 @@ class MainActivity : ComponentActivity() {
             DshMobileApp(
                 settings = settings,
                 settingsRevision = settingsRevision,
+                openWorkspaceRevision = workspaceRevision,
                 onWebViewCreated = { webViewRef = it },
                 onOpenSettings = { /* handled inside the Compose shell */ },
             )
         }
+        acceptOverlayDraft(intent)
+    }
+
+    private fun acceptOverlayDraft(intent:Intent) {
+        if(!intent.getBooleanExtra("companion_draft_pending",false))return
+        val owner=DshLiveService.current() ?: return
+        val text=owner.pendingOverlayDraft ?: return
+        owner.pendingOverlayDraft=null
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val route=DshLiveService.current()?.companionBridge
+            if(route==null)android.widget.Toast.makeText(this,"对话尚未就绪，挂件草稿仍保留",android.widget.Toast.LENGTH_LONG).show()
+            else route.stageQuickDraft(text){result->
+                RunLog.info("OverlayReply","main editor staging result=$result")
+                android.widget.Toast.makeText(this,if(result=="staged")"已填入当前对话，请核对后发送" else "未覆盖主对话草稿，挂件草稿仍保留",android.widget.Toast.LENGTH_LONG).show()
+            }
+        },400)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleStaticPreviewIntent(intent)
         setIntent(intent)
+        if(intent.action == "com.dsh.mobile.OPEN_WORKSPACE") workspaceRevision++
         val targetChanged = handleDeepLink(intent)
         handleDebugIslandIntent(intent)
         // A media/notification tap only resumes this Activity. Re-keying Compose
         // here would replace a consumed pairing URL with the origin and reload.
         if (targetChanged) settingsRevision++
+        acceptOverlayDraft(intent)
         RunLog.info("Activity", "new intent targetChanged=$targetChanged page=${webViewRef?.let { System.identityHashCode(it) }}")
     }
 

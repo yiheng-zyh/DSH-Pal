@@ -47,19 +47,19 @@ object WebLayoutScript {
   var rightOpen=null,rightPanel=null,rightGeneration=0,rightAnimation=null,rightClosing=false,rightBypass=false;
   function bindTitle() {
     if (!frame || (titleNode && titleNode.isConnected)) return;
-    var next=frame.querySelector('[data-dsh-mobile-center] [class*="_crumbCurrent"]');
+    var next=document.querySelector('head > title') || frame.querySelector('[data-dsh-mobile-center] [class*="_crumbCurrent"]');
     if (!next) return;
     if (titleObserver) titleObserver.disconnect();
     titleNode=next;
     function publish() {
-      var title=titleNode.textContent.trim().slice(0,180);
+      var title=(titleNode.tagName==='TITLE'?document.title:titleNode.textContent).trim().replace(/\s*(?:—|\||-)\s*DeepSeek Harness\s*$/i,'').slice(0,180);
       if (title && title!==lastTitle) {
         lastTitle=title;
         try { window.DshNative.onBridgeMessage(JSON.stringify({kind:'page-title',payload:title})); } catch (_) {}
       }
     }
     titleObserver=new MutationObserver(publish);
-    titleObserver.observe(titleNode,{childList:true,characterData:true,subtree:true});
+    titleObserver.observe(titleNode.tagName==='TITLE'&&document.head?document.head:titleNode,{childList:true,characterData:true,subtree:true});
     publish();
   }
   function log(message) {

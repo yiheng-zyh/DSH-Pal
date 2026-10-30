@@ -67,7 +67,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 
 private enum class SettingsPage(val title: String) {
-    Home("设置"), Connection("设备与连接"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
+    Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
 }
 
 /**
@@ -99,6 +99,7 @@ fun SettingsScreen(
     var selectedAppearance by remember { mutableStateOf(settings.localAppearance) }
     fun parent() = when(page) {
         SettingsPage.NotificationControls,SettingsPage.NotificationSupport,SettingsPage.NotificationDemo -> SettingsPage.Notifications
+        SettingsPage.CompanionStyle -> SettingsPage.Companion
         SettingsPage.Logs -> SettingsPage.Diagnostics
         else -> SettingsPage.Home
     }
@@ -141,6 +142,7 @@ fun SettingsScreen(
             if (section == SettingsPage.Home) {
                 SettingsLink("连接管理", "查看当前连接 · 切换 VPN / 公网 / USB") { page = SettingsPage.Connection }
                 SettingsLink("连接帮助", "Cloudflare、Relay、自有 HTTPS 与 VPN 两端配置") { showConnectionHelp = true }
+                SettingsLink("悬浮助手", "鲸鱼娘 · 实时任务信息与大小设置") { page = SettingsPage.Companion }
                 SettingsLink("外观", "跟随 DSH 背景，或选择手机本地色调") { page = SettingsPage.Appearance }
                 SettingsLink("通知与后台", "灵动岛、任务进度与后台连接") { page = SettingsPage.Notifications }
                 SettingsLink("缓存与加载", "自动更新与本地资源复用") { page = SettingsPage.Cache }
@@ -148,6 +150,9 @@ fun SettingsScreen(
                 SettingsLink("支持与诊断", "分类日志与问题记录") { page = SettingsPage.Diagnostics }
                 SettingsLink("关于", "版本、开源许可与项目链接") { page = SettingsPage.About }
             }
+
+            if(section==SettingsPage.Companion) FloatingCompanionSettings(settings) {page=SettingsPage.CompanionStyle}
+            if(section==SettingsPage.CompanionStyle) FloatingCompanionStyleSettings(settings)
 
             if(section==SettingsPage.Notifications) {
                 SettingsLink("通知选项","灵动岛、任务进度、后台连接与震动"){page=SettingsPage.NotificationControls}

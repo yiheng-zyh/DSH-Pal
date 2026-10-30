@@ -52,6 +52,7 @@ fun DshMobileApp(
     settingsRevision: Int,
     onWebViewCreated: (WebView) -> Unit,
     onOpenSettings: () -> Unit,
+    openWorkspaceRevision: Int = 0,
 ) {
     // Re-read stored state whenever the host reports a change (a deep link
     // arriving in onNewIntent, or unpairing). Compose cannot observe
@@ -121,6 +122,16 @@ fun DshMobileApp(
     }
 
     var activeWebView by remember { mutableStateOf<WebView?>(null) }
+    var handledWorkspaceRevision by remember {mutableStateOf(0)}
+    LaunchedEffect(openWorkspaceRevision,activeWebView,shellLoading) {
+        if(openWorkspaceRevision>handledWorkspaceRevision){
+            showDiagnostics=false
+            if(activeWebView!=null && !shellLoading){
+                activeWebView?.evaluateJavascript("(function(){try{window.__DSH_MOBILE_MOTION__&&__DSH_MOBILE_MOTION__.closeLeft(true);window.__DSH_PHONE_RIGHT__&&__DSH_PHONE_RIGHT__.close(true)}catch(_){}return true})()",null)
+                handledWorkspaceRevision=openWorkspaceRevision
+            }
+        }
+    }
     var pendingReload by remember { mutableStateOf<WebView?>(null) }
     val reloadPage: () -> Unit = { com.dsh.mobile.ui.web.requestPageReload(activeWebView) { pendingReload = it } }
     val bridge = remember(configuredOrigin) { DshBridge(profileProvider = { settings.activeProfile }) { activeWebView } }
