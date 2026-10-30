@@ -380,6 +380,7 @@ fun ShellScreen(
                 task = task,
                 connected = socketConnected,
                 progress = progress,
+                pageReady = pageLoaded,
                 onOpenDiagnostics = onOpenDiagnostics,
                 onReload = onReloadPage,
                 showActions = pageLoaded,
@@ -526,6 +527,7 @@ private fun TaskStrip(
     task: TaskState,
     connected: Boolean,
     progress: Int,
+    pageReady: Boolean,
     onOpenDiagnostics: () -> Unit,
     onReload: () -> Unit,
     showActions:Boolean,
@@ -548,7 +550,8 @@ private fun TaskStrip(
             animationSpec = tween(durationMillis = Motion.PROGRESS_MS),
             label = "pageLoad",
         )
-        if (loadFraction > 0.001f && loadFraction < 1f) {
+        // Streaming plugins may leave Chromium below 100% after the UI is usable.
+        if (!pageReady && loadFraction > 0.001f && loadFraction < 1f) {
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -607,7 +610,7 @@ private fun TaskStrip(
                 Text(
                     text = when {
                         task.headline.isNotBlank() -> task.headline
-                        progress in 1..99 -> "加载页面 $progress%"
+                        !pageReady && progress in 1..99 -> "加载页面 $progress%"
                         !connected -> "正在连接…"
                         else -> connectionName
                     },

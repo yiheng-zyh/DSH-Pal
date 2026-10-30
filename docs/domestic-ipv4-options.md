@@ -15,6 +15,8 @@
 
 首选工作顺序：修复App基本连接 → 验证DSH专用托管方案的协议边界与IPv4路径 → 对符合注册/节点条件的通用国内中转做独立备用入口。保留原连接；不自动把会话/凭据搬给新服务，不改NAS生产配置。
 
+2026-10-31 更新：已用用户授权的免费账号部署 cpolar 并独立验收。后台只读测试通过，手机曾成功进入工作区，但重复冷启动仍发生长时间等待，cn/cn_top 两条大陆线路均未达到稳定交付标准。测试通道和自动启动已停用，保留加密配置，原主通道继续使用。传输兼容工具、实测证据边界和后续复测方法见 [cpolar 传输说明](cpolar-transport.md)。
+
 官方来源：
 - https://github.com/liguobao/ds-harness-remote
 - https://www.chmlfrp.net/ 和 https://docs.chmlfrp.net/docs/use/mapping
