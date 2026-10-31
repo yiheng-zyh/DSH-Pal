@@ -21,7 +21,7 @@ object RecoveryPolicy {
         Regex("^HTTP (429|5[0-9]{2})$").matches(message) ||
         message.contains("ERR_TIMED_OUT") || message.contains("ERR_CONNECTION_RESET") ||
         message.contains("ERR_CONNECTION_CLOSED") || message.contains("ERR_CONNECTION_REFUSED") ||
-        message.contains("ERR_NETWORK_CHANGED") || message.startsWith("页面未能启动")
+        message.contains("ERR_NETWORK_CHANGED")
     )
     fun delayMs(failures: Int): Long = longArrayOf(1_000,2_000,4_000,8_000,15_000,30_000)[failures.coerceIn(0,5)]
     fun canReload(connected: Boolean, reachable: Boolean, authLost: Boolean, busy: Boolean, disconnectedMs: Long, sinceReloadMs: Long, attempts: Int = 0, loadingResources: Int = 0): Boolean =

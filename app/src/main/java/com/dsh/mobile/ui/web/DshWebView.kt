@@ -48,6 +48,7 @@ fun DshWebView(
     val context = LocalContext.current
     val loadScope=rememberCoroutineScope()
     val capabilities = rememberWebCapabilities()
+    val pageReadyScript = remember { context.assets.open("page-ready.js").bufferedReader().use { it.readText() } }
     val fileScript = remember {
         context.assets.open("web-files.js").bufferedReader().use { it.readText() }.replace("__DSH_FILE_AUTHORITY__", capabilities.exportAuthority) + "\n" +
             context.assets.open("web-media.js").bufferedReader().use { it.readText() } + "\n" + context.assets.open("business-health.js").bufferedReader().use { it.readText() }
@@ -119,27 +120,7 @@ fun DshWebView(
         var focusPrepared = false
         val contentProbe = object : Runnable {
             override fun run() {
-                webView.evaluateJavascript("""
-                    (function(){
-                      if(window.__DSH_REMOTE_HOST_GRANT__ && !window.__DSH_PAIR_REPORTED__ && window.DshNative){
-                        window.__DSH_PAIR_REPORTED__=true;
-                        DshNative.onBridgeMessage(JSON.stringify({kind:'pair-established'}));
-                      }
-                      var body = document.body;
-                      if (!body) return false;
-                      var text = body.innerText || '';
-                      if(!window.__DSH_REMOTE_HOST_GRANT__ && /^\/pair-(app|accept)$/.test(location.pathname) && document.title==='Pairing link invalid') {
-                        if(!window.__DSH_AUTH_REPORTED__&&window.DshNative) {
-                          window.__DSH_AUTH_REPORTED__=true;
-                          DshNative.onBridgeMessage(JSON.stringify({kind:'auth-lost'}));
-                        }
-                        return 'auth-required';
-                      }
-                      if (text.indexOf('探索未至之境') >= 0) return true;
-                      return Array.from(document.querySelectorAll('textarea,[contenteditable="true"],[role="textbox"]'))
-                        .some(function(el){ var r=el.getBoundingClientRect(); return r.width>0 && r.height>0; });
-                    })()
-                """.trimIndent()) { result ->
+                webView.evaluateJavascript(pageReadyScript) { result ->
                     if(result == "\"auth-required\"") {
                         com.dsh.mobile.core.RunLog.warn("Connection","stage=pairing rejected; saved route retained; re-pair required")
                         // The VPN route is the confusing one: Tailscale login

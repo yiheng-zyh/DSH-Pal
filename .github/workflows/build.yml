@@ -67,6 +67,12 @@ jobs:
           node tools/test-web-drawer.mjs
           node tools/test-web-viewport.mjs
 
+      - name: Check connection recovery and startup probe
+        run: |
+          node tools/test-browser-health.mjs
+          node tools/test-connection-recovery.mjs
+          node tools/test-page-ready.mjs
+
       - name: Assemble
         run: ./gradlew.bat :app:assembleDebug :app:testDebugUnitTest --stacktrace
 

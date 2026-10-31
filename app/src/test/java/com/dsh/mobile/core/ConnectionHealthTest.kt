@@ -81,6 +81,6 @@ class ConnectionHealthTest {
     }
     @Test fun onlyTransientMainPageFailuresCanRetryWithoutProbeContext() {
         for(message in listOf("HTTP 503","HTTP 429","net::ERR_TIMED_OUT","net::ERR_NETWORK_CHANGED"))assertTrue(RecoveryPolicy.retryablePageFailure(message))
-        for(message in listOf(null,"HTTP 401","HTTP 403","HTTP 404","配对凭据已失效","页面运行出错，可打开设置查看日志"))assertFalse(RecoveryPolicy.retryablePageFailure(message))
+        for(message in listOf(null,"HTTP 401","HTTP 403","HTTP 404","配对凭据已失效","页面运行出错，可打开设置查看日志","页面未能启动（90 秒），请检查连接日志或重试"))assertFalse(RecoveryPolicy.retryablePageFailure(message))
     }
 }

@@ -135,6 +135,7 @@ fun ShellScreen(
     var pageLoaded by remember(loadUrl) { mutableStateOf(false) }
     var mainDocumentFailed by remember(loadUrl) { mutableStateOf(false) }
     var loadAttempt by remember { mutableStateOf(0) }
+    var confirmStartupRestart by remember(loadUrl) { mutableStateOf(false) }
     var service by remember { mutableStateOf<DshLiveService?>(null) }
     val network by com.dsh.mobile.core.NetworkConnectivity.state.collectAsState()
     val appVisible by com.dsh.mobile.core.NetworkConnectivity.visible.collectAsState()
@@ -159,6 +160,27 @@ fun ShellScreen(
     }
     val resourceLoad = remember(loadUrl, resourceTick) {
         com.dsh.mobile.ui.web.WebResourceCache.load.snapshot()
+    }
+    val pendingStartupResources = !mainDocumentFailed && (business.loadingResources > 0 || resourceLoad.busy)
+    val restartStartup: () -> Unit = {
+        loadError = null
+        pageLoaded = false
+        mainDocumentFailed = false
+        autoReloadAttempts = 0
+        loadAttempt++
+        com.dsh.mobile.core.RunLog.info("Connection", "manual retry attempt=$loadAttempt")
+        webViewRef?.let { com.dsh.mobile.ui.web.reloadPairedPage(it) }
+    }
+    val retryStartup: () -> Unit = {
+        if (pendingStartupResources) {
+            loadError = "界面资源仍在下载，已保留当前进度；可继续等待或选择重新下载"
+            com.dsh.mobile.core.RunLog.info("Connection", "retry deferred; preserving pending resource downloads")
+            webViewRef?.context?.let {
+                android.widget.Toast.makeText(it, "资源仍在下载，已保留当前进度", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            restartStartup()
+        }
     }
     val networkStatus = com.dsh.mobile.core.ConnectionQualityPolicy.describe(
         if(usbRoute) "USB" else network.transport, network.available || usbRoute,
@@ -345,26 +367,28 @@ fun ShellScreen(
         }
     }
 
-    // Load watchdog. A page that neither finishes nor reports an error (a hung
-    // connection, or a host that silently drops packets) leaves the WebView blank
-    // forever, which is indistinguishable from a frozen app. Turning that into an
-    // explicit failure guarantees the user always gets the retry/re-pair buttons.
-    //
-    // The liveness signal is `pageLoaded`, NOT the progress percentage: the
-    // handshake lands on a redirect target (`/pair-app?grant=…`) whose
-    // `onProgressChanged` does not necessarily reach 100, so a progress-based test
-    // falsely declared a perfectly good page dead. `onPageFinished` is the real
-    // "the document is up" signal.
+    // A deadline explains a slow startup; only WebView's actual error callbacks
+    // establish main-document failure. A slow plugin download must keep running.
     LaunchedEffect(loadUrl, loadAttempt) {
         delay(LOAD_TIMEOUT_MS)
         if (loadError == null && !pageLoaded) {
-            mainDocumentFailed = true
-            loadError = "页面未能启动（${LOAD_TIMEOUT_MS / 1000} 秒），请检查连接日志或重试"
-            com.dsh.mobile.core.RunLog.warn("Connection", "load timeout; progress=$progress socket=$socketConnected")
+            val downloading = !mainDocumentFailed && (business.loadingResources > 0 || com.dsh.mobile.ui.web.WebResourceCache.load.snapshot().busy)
+            loadError = if (downloading)
+                "界面资源下载较慢，正在保留当前进度；可继续等待或查看日志"
+            else "页面等待已超过 ${LOAD_TIMEOUT_MS / 1000} 秒，可查看日志或重试"
+            com.dsh.mobile.core.RunLog.warn("Connection", "startup wait exceeded; progress=$progress socket=$socketConnected resources=${business.loadingResources}")
         }
     }
 
     val nativeColors = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+    com.dsh.mobile.ui.ConfirmationDialog(
+        show = confirmStartupRestart,
+        title = "重新下载界面资源？",
+        message = "当前下载将被中断，未缓存的内容需要重新下载。继续等待会保留当前进度。",
+        cancelText = "继续等待", confirmText = "重新下载",
+        onDismiss = { confirmStartupRestart = false },
+        onConfirm = { confirmStartupRestart = false; if (!pageLoaded) restartStartup() },
+    )
     val chrome = if (!pageLoaded) com.dsh.mobile.ui.theme.ShellSurfaceColors(nativeColors.background, nativeColors.surface, nativeColors.onBackground, nativeColors.onBackgroundVariant) else LocalShellSurface.current
     androidx.compose.runtime.CompositionLocalProvider(LocalShellSurface provides chrome) {
     Box(
@@ -414,8 +438,8 @@ fun ShellScreen(
                 // The page itself paints nothing until the harness bundle lands, so
                 // without this the user stares at a flat dark rectangle for the whole
                 // first load. Cover it with the boot layer and fade that out the
-                // moment the document is up: `pageLoaded` flips on onPageFinished or
-                // on bridge `ready`, whichever arrives first.
+                // moment an actual visible editor is ready; a bridge callback or
+                // onPageFinished alone does not prove the workspace is usable.
                 androidx.compose.animation.AnimatedVisibility(
                     visible = !pageLoaded,
                     enter = fadeIn(tween(0)),
@@ -427,7 +451,7 @@ fun ShellScreen(
                         progress = progress,
                         onRepair = onUnpair,
                         onDiagnostics = onOpenDiagnostics,
-                        onReload = onReloadPage,
+                        onReload = retryStartup,
                     )
                 }
 
@@ -448,7 +472,7 @@ fun ShellScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (authLost) "需要配对" else "正在自动恢复",
+                                text = if (authLost) "需要配对" else if (mainDocumentFailed) "连接暂不可用" else "加载较慢",
                                 color = LocalShellSurface.current.onBackground,
                                 fontWeight = FontWeight.Medium,
                             )
@@ -462,20 +486,12 @@ fun ShellScreen(
                         Spacer(Modifier.height(8.dp))
                         Row {
                             Text(
-                                text = "重试",
+                                text = if (pendingStartupResources) "重新下载" else "重试",
                                 color = LocalDshAccents.current.accent,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .pressClickable {
-                                        loadError = null
-                                        // Reset the liveness flag so the watchdog
-                                        // can fire again if this attempt also hangs.
-                                        pageLoaded = false
-                                        mainDocumentFailed = false
-                                        autoReloadAttempts = 0
-                                        loadAttempt++
-                                        com.dsh.mobile.core.RunLog.info("Connection", "retry attempt=$loadAttempt")
-                                        webViewRef?.let { com.dsh.mobile.ui.web.reloadPairedPage(it) }
+                                        if (pendingStartupResources) confirmStartupRestart = true else retryStartup()
                                     }
                                     .padding(horizontal = 14.dp, vertical = 6.dp),
                             )
