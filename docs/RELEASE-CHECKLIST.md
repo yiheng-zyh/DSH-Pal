@@ -19,9 +19,10 @@
 - [ ] 原入口→目标→原入口、失败和取消路径验证，不丢登录/草稿，VPN按需停止。
 - [ ] 手机/平板左右栏、嵌套滚动、窗口变化、通知开关与文件实际上传分别检查。
 - [ ] WG、未覆盖插件、平板通知详情等限制如实写入Release。
-- [ ] 确定版本名与递增versionCode；当前基线仍versionName1.0.0/versionCode1，不把旧编号当新发布策略。
+- [ ] 确定版本名与递增versionCode；本地更新功能基线为0.1.0-alpha.7/versionCode8，以实际APK为准，不复用旧编号。
 - [ ] 使用维护者自己的稳定签名并离线保管，不上传keystore或密码；debug回退签名不可称正式签名。
 - [ ] 产物校验签名和SHA-256，正常release非debuggable、未开启USB/CDP；真机只覆盖安装。
+- [ ] 同一Release上传最终APK和SHA256SUMS.txt，tag与APK版本名一致；检查更新说明和公告文件，按[更新发布步骤](app-updates.md)核验。
 - [ ] 首次不确定兼容性时使用开发预览/Pre-release，检查项未过不发布为稳定版。
 
 ## 对外演示之前

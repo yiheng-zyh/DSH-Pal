@@ -67,7 +67,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 
 private enum class SettingsPage(val title: String) {
-    Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
+    Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), Updates("更新与公告"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
 }
 
 /**
@@ -133,6 +133,7 @@ fun SettingsScreen(
         if(section==SettingsPage.Cache) com.dsh.mobile.ui.BackGestureSurface {CacheManagementScreen(settings,webView,{page=SettingsPage.Home},onReloadPage)}
         else if(section==SettingsPage.Logs) com.dsh.mobile.ui.BackGestureSurface {LogSettingsScreen{page=SettingsPage.Diagnostics}}
         else if(section==SettingsPage.About) com.dsh.mobile.ui.BackGestureSurface {AboutScreen{page=SettingsPage.Home}}
+        else if(section==SettingsPage.Updates) com.dsh.mobile.ui.BackGestureSurface {UpdatesScreen{page=SettingsPage.Home}}
         else {
         Column(Modifier.fillMaxSize().safeDrawingPadding(),horizontalAlignment=Alignment.CenterHorizontally) {
             Column(Modifier.widthIn(max=840.dp).fillMaxWidth().padding(horizontal=20.dp,vertical=12.dp)) {
@@ -149,6 +150,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(14.dp))
                 SettingsLink("支持与诊断", "分类日志与问题记录") { page = SettingsPage.Diagnostics }
                 SettingsLink("关于", "版本、开源许可与项目链接") { page = SettingsPage.About }
+                SettingsLink("更新与公告", "检查版本、下载更新与查看公告") { page = SettingsPage.Updates }
             }
 
             if(section==SettingsPage.Companion) FloatingCompanionSettings(settings) {page=SettingsPage.CompanionStyle}

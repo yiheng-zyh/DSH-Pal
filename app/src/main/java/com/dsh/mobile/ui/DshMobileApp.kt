@@ -70,6 +70,7 @@ fun DshMobileApp(
     }.orEmpty()) }
     var shellLoadUrl by remember(settingsRevision) { mutableStateOf(settings.pairingUrl.ifBlank { com.dsh.mobile.core.LaunchRouting.resumeUrl(settings.baseUrl) }) }
     var shellLoading by remember { mutableStateOf(true) }
+    var taskBusy by remember {mutableStateOf(false)}
     var showDiagnostics by remember { mutableStateOf(false) }
     var addingConnection by remember { mutableStateOf(false) }
     // Set when a MESH route needs its own pairing step; the VPN screen owns the
@@ -280,6 +281,7 @@ fun DshMobileApp(
                         },
                         onReloadPage = reloadPage,
                         onLoadingChanged = { shellLoading = it },
+                        onTaskBusyChanged = {taskBusy=it},
                         onPairingConsumed = { origin ->
                             val canonical = com.dsh.mobile.core.ConnectionAddress.origin(origin)
                             if (canonical == settings.activeProfile?.baseUrl && canonical == configuredOrigin) {
@@ -373,6 +375,7 @@ fun DshMobileApp(
             }
         }
         ConfirmationDialog(show=switchError!=null,title="连接未切换",message=switchError.orEmpty(),cancelText="关闭",confirmText="知道了",onDismiss={switchError=null},onConfirm={switchError=null})
+        UpdateNoticeHost(readyForNotice=!showDiagnostics&&!addingConnection&&!switching&&!taskBusy&&pendingPairUrl.isBlank()&&configuredOrigin.isNotBlank()&&!shellLoading)
         com.dsh.mobile.ui.ConfirmationDialog(
             show = pendingNavigation != null, title = "切换连接？",
             message = "当前页面有未发送内容，切换连接后可能丢失，请先保存。", confirmText = "继续切换", cancelText = "保留草稿",

@@ -2,10 +2,11 @@
 <!--
   Paths exposed through the FileProvider used to share the run log.
 
-  Only the app's private external files dir is exposed: the log lives there and
-  nothing else needs to leave the sandbox.
+  Existing log sharing uses private external files. Verified update APKs use
+  only the dedicated app-updates cache subdirectory, with temporary read grants.
 -->
 <paths>
+    <cache-path name="app_update" path="app-updates/" />
     <external-files-path
         name="run_log"
         path="." />

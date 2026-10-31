@@ -121,9 +121,11 @@ fun ShellScreen(
     onLoadingChanged: (Boolean) -> Unit,
     onPairingConsumed: (String) -> Unit,
     onUnpair: () -> Unit,
+    onTaskBusyChanged: (Boolean) -> Unit = {},
 ) {
     var progress by remember { mutableStateOf(0) }
     var task by remember { mutableStateOf(TaskState()) }
+    LaunchedEffect(task.isLive){onTaskBusyChanged(task.isLive)}
     var loadError by remember { mutableStateOf<String?>(null) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     // Whether the page's own WebSocket is open. Distinct from "page loaded": the
