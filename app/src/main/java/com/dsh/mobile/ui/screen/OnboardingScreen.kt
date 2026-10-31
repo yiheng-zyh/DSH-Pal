@@ -26,7 +26,7 @@ import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** Method choice first; a form is only shown after a deliberate choice. */
+/** Pairing QR first; manual transport forms remain available when needed. */
 @Composable
 fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCancel: (() -> Unit)? = null,
                      onConnectionRequested: ((String,String,ConnectionProfile.Kind,ConnectionProfile.MeshProvider?)->Unit)? = null) {
@@ -52,6 +52,20 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
     val markIn = timeline.at(0, 420)
     val actionIn = timeline.at(180, 720)
     val guideIn = timeline.at(420, 1000)
+    fun connectScanned(raw: String) {
+        runCatching { PairingQr.parse(raw, BuildConfig.USB_DEVELOPMENT) }.onSuccess { entry ->
+            error = null
+            if (entry.kind == ConnectionProfile.Kind.MESH) {
+                input = entry.url; selected = entry.kind
+                selectedProvider = com.dsh.mobile.vpn.VpnProvider.TAILSCALE
+                routeNotice = "已识别组网入口，请先完成对应网络授权。"
+            } else if (onConnectionRequested != null) {
+                onConnectionRequested(entry.url, "", entry.kind, null)
+            } else {
+                settings.saveConnection(entry.url, "", entry.kind); onPaired(entry.url)
+            }
+        }.onFailure { error = "请扫描电脑 DSH「远程访问」面板中有效的配对二维码" }
+    }
     fun connect(raw: String) {
         val kind = selected ?: return
         val candidate = raw.trim().let { if (kind in setOf(ConnectionProfile.Kind.LAN, ConnectionProfile.Kind.MESH) && "://" !in it) "http://$it" else it }
@@ -80,7 +94,7 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(if (selected == null) "连接 DSH" else selected!!.title, fontSize = if(selected==ConnectionProfile.Kind.MESH||selected?.publicEntry==true) 18.sp else 24.sp, fontWeight = FontWeight.SemiBold)
-                    Text(if (selected == null) "选择适合你的连接方式" else "首次使用这个地址可能需要配对", fontSize = 12.sp, color = colors.onBackgroundVariant)
+                    Text(if (selected == null) "扫描电脑配对码，自动识别连接方式" else "首次使用这个地址可能需要配对", fontSize = 12.sp, color = colors.onBackgroundVariant)
                 }
                 if (selected != null || onCancel != null) Text("返回", color = accent, modifier = Modifier.clickable {
                     if (selected != null) { selected = null; error = null } else onCancel?.invoke()
@@ -89,9 +103,15 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
             Spacer(Modifier.height(24.dp))
             Column(Modifier.fillMaxWidth().graphicsLayer { alpha = actionIn; translationY = (1f-actionIn)*20f }) {
                 if (selected == null) {
-                    // Relay leads: it carries the recommendation and is the route the
-                    // desktop panel's default QR actually points at, so the first card
-                    // is the one a new user should tap.
+                    Card(Modifier.fillMaxWidth().padding(bottom=18.dp)) {
+                        Column(Modifier.padding(18.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Text("扫插件二维码即可连接", fontSize=18.sp, fontWeight=FontWeight.Medium)
+                            Text("国内 HTTPS、Relay 与 Cloudflare 入口均自动识别，无需先选择通道。", fontSize=13.sp, color=colors.onBackgroundVariant)
+                            Button(onClick={error=null;scanner=true},modifier=Modifier.fillMaxWidth()) { Text("扫码连接") }
+                            error?.let { Text(it,color=LocalDshAccents.current.error,fontSize=13.sp) }
+                        }
+                    }
+                    Text("手动选择连接方式",fontSize=13.sp,color=colors.onBackgroundVariant,modifier=Modifier.padding(bottom=10.dp))
                     listOf(ConnectionProfile.Kind.RELAY to null, ConnectionProfile.Kind.TUNNEL to null, ConnectionProfile.Kind.CUSTOM to null, ConnectionProfile.Kind.MESH to com.dsh.mobile.vpn.VpnProvider.TAILSCALE, ConnectionProfile.Kind.MESH to com.dsh.mobile.vpn.VpnProvider.WIREGUARD, ConnectionProfile.Kind.LAN to null, ConnectionProfile.Kind.USB to null).forEach { (kind,provider) ->
                         val entries=settings.profiles.filter {p->p.kind==kind && (provider==null || p.meshProvider?.name==provider.name ||
                             (p.meshProvider==null && provider==com.dsh.mobile.vpn.VpnProvider.TAILSCALE && java.net.URI(p.baseUrl).host.endsWith(".ts.net")))}
@@ -103,12 +123,7 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
                         }) {
                             Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    // Relay carries the recommendation because the desktop
-                                    // plugin's default QR issues a dsh-market.com address:
-                                    // that is what a new user actually has in front of them,
-                                    // and marking the other route "推荐" sent them looking for
-                                    // an address their panel never printed.
-                                    Text(provider?.title ?: if(kind == ConnectionProfile.Kind.RELAY) "${kind.title}（推荐）" else kind.title, fontSize=17.sp, fontWeight=FontWeight.Medium, color=if(available) colors.onBackground else colors.onBackgroundVariant)
+                                    Text(provider?.title ?: kind.title, fontSize=17.sp, fontWeight=FontWeight.Medium, color=if(available) colors.onBackground else colors.onBackgroundVariant)
                                     Spacer(Modifier.height(6.dp))
                                     Text(when(kind) {
                                         ConnectionProfile.Kind.TUNNEL -> "直达 Cloudflare 隧道；Quick 临时地址 / Named 自有域名"
@@ -241,7 +256,7 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
             }
             Spacer(Modifier.height(24.dp))
         }
-        if (scanner) QrScannerSheet(onScanned={ raw -> scanner=false; connect(raw) }, onCancel={ scanner=false })
+        if (scanner) QrScannerSheet(onScanned={ raw -> scanner=false; if(selected==null)connectScanned(raw)else connect(raw) }, onCancel={ scanner=false })
         if (selected==ConnectionProfile.Kind.MESH) VpnSettingsScreen(
             onBack={selected=null},onSelectedServer={},settings=settings,initialProvider=selectedProvider,initialAddress=input,
             onConnectRequested={url,name,provider->

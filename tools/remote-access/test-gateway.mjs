@@ -74,6 +74,17 @@ test('authentication errors and application 503 are neither hidden nor retried',
     assert.equal(result.status,503);assert.equal(result.body.toString(),'relay storage unavailable');assert.equal(calls,2);
   }finally{await f.close();}
 });
+
+test('ego event-only opt-in filters frames before public transfer while normal viewers retain frames',async()=>{
+  const body='event: frame\ndata: JPEG-FIXTURE\n\nevent: tool-call\ndata: {"count":2}\n\n';let seen;
+  const f=await fixture((req,res)=>{seen=req.url;res.writeHead(200,{'content-type':'text/event-stream','content-length':Buffer.byteLength(body)});res.end(body);});
+  try{
+    const filtered=await request(f,'/remote/api/ego/stream?dsh_events_only=1');
+    assert.equal(filtered.body.toString(),'event: tool-call\ndata: {"count":2}\n\n');
+    assert.equal(seen,'/remote/api/ego/stream');assert.equal(filtered.headers['content-length'],undefined);
+    const full=await request(f,'/remote/api/ego/stream');assert.equal(full.body.toString(),body);
+  }finally{await f.close();}
+});
 test('compression is passed through with exact encoded content length',async()=>{
   const body=zlib.gzipSync(Buffer.from('fixture source '.repeat(20000)));
   const f=await fixture((_,res)=>{res.writeHead(200,{'content-type':'text/javascript','content-encoding':'gzip','content-length':body.length});res.end(body);});

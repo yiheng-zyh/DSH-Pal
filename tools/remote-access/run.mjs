@@ -13,6 +13,16 @@ const config=validateConfig(JSON.parse(await fs.readFile(path.join(directory,'co
 let targetPort=null,child=null,stopping=false,failures=0,restartAt=0,clientState='not-started';
 let token;
 let lastTrustCheck=0;
+// Reuse only a previously recorded port as a discovery hint, never as a
+// trusted target. findDshPort fingerprints it again before forwarding.
+let preferredPort=config.dshPort;
+if(preferredPort===undefined){
+  try{
+    const previous=JSON.parse(await fs.readFile(path.join(directory,'state.json'),'utf8'));
+    if(previous.publicOrigin===config.publicOrigin&&Number.isInteger(previous.targetPort)&&previous.targetPort>=1024&&previous.targetPort<=65535)
+      preferredPort=previous.targetPort;
+  }catch{}
+}
 if(config.provider==='sakura'){
   const digest=createHash('sha256').update(await fs.readFile(config.frpcPath)).digest('hex');
   if(digest!==config.frpcSha256)throw Error('frpc executable changed; verify it before starting');
@@ -49,8 +59,10 @@ async function update(){
   if(config.dshConfigPath&&Date.now()-lastTrustCheck>60000){
     await applyTrustedHost(config.dshConfigPath,config.publicOrigin);lastTrustCheck=Date.now();
   }
-  targetPort=await findDshPort({preferred:targetPort??config.dshPort});
-  if(!child&&Date.now()>=restartAt)startClient();
+  targetPort=await findDshPort({preferred:targetPort??preferredPort});
+  if(targetPort!==null)preferredPort=targetPort;
+  // Do not publish an external tunnel while initial DSH discovery is pending.
+  if(targetPort!==null&&!child&&Date.now()>=restartAt)startClient();
   const value={updatedAt:new Date().toISOString(),pid:process.pid,targetAvailable:targetPort!==null,
     targetPort,clientState,publicOrigin:config.publicOrigin,businessVerified:false,...gateway.snapshot()};
   const temporary=path.join(directory,`state-${process.pid}.tmp`);

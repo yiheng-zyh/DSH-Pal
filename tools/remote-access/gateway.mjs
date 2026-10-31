@@ -2,6 +2,7 @@ import http from 'node:http';
 import net from 'node:net';
 import {pipeline} from 'node:stream';
 import {origin,port} from './config.mjs';
+import {egoEventsOnly} from './ego-events.mjs';
 
 const protectedHeaders=new Set(['host','origin','cookie','authorization','x-forwarded-host','x-forwarded-for','x-forwarded-proto']);
 const hopHeaders=['connection','keep-alive','proxy-connection','proxy-authorization','proxy-authenticate','transfer-encoding','te','trailer','upgrade'];
@@ -34,6 +35,22 @@ export function createGateway({publicOrigin,getTargetPort}){
   const allowedOrigin=origin(publicOrigin),publicUrl=new URL(allowedOrigin);
   const agent=new http.Agent({keepAlive:true,maxSockets:24,maxFreeSockets:6});
   const liveSockets=new Set();
+  // Fixed categories only: never retain user paths, resource tokens or queries.
+  const traffic={};
+  function trafficKind(url){
+    let p=pathname(url)||'';
+    if(p.startsWith('/remote/'))p=p.slice('/remote'.length);
+    if(p.startsWith('/wallpaper-engine/'))return 'wallpaper:'+p.split('/')[2];
+    if(p.startsWith('/api/')){
+      const name=p.slice('/api/'.length);
+      const namespace=name.split('/')[0];
+      if(['session','workspace','settings','llm','skills','credentials','commands','server','dsh','dynamicCordisRunner','ego','agentPresets','account','permissionPresets','experimental-inspector','schedule','remote.events','remote.stream','events','changes.summary','restart-button.status'].includes(namespace)&&/^[A-Za-z./-]{1,80}$/.test(name))return 'business:'+name;
+      return 'business:other';
+    }
+    if(p.startsWith('/plugins/'))return 'plugins';
+    if(p.startsWith('/assets/'))return 'assets';
+    return 'other';
+  }
   const statistics={requests:0,completed:0,active:0,failed:0,cancelled:0,responseBytes:0,remoteResponses:0,remoteErrors:0,upgrades:0,webSocketAccepted:0,taskMuxAccepted:0,upgradeClientBytes:0};
   function allowed(req,upgrade=false){
     if(authority(req.headers.host)!==allowedOrigin)return false;
@@ -61,21 +78,31 @@ export function createGateway({publicOrigin,getTargetPort}){
   }
   const server=http.createServer((req,res)=>{
     statistics.requests++;
+    let trafficKey=trafficKind(req.url);
+    if(!Object.hasOwn(traffic,trafficKey)&&Object.keys(traffic).length>=32)trafficKey='other';
+    const meter=traffic[trafficKey]??(traffic[trafficKey]={requests:0,responseBytes:0,requestBytes:0});
+    meter.requests++;req.on('data',chunk=>meter.requestBytes+=chunk.length);
     if(!allowed(req)){res.writeHead(403,{'cache-control':'no-store'});res.end('Forbidden');return;}
     const localPort=target();
     if(!localPort){res.writeHead(503,{'cache-control':'no-store','retry-after':'5'});res.end('Local DSH is not available');return;}
     statistics.active++;
     let cancelled=false;
     const started=Date.now();
+    const parsed=new URL(req.url,allowedOrigin);
+    const eventBudget=/^\/(?:remote\/)?api\/ego\/stream$/.test(parsed.pathname)&&parsed.searchParams.get('dsh_events_only')==='1';
+    if(eventBudget)parsed.searchParams.delete('dsh_events_only');
     res.once('close',()=>{statistics.active--;statistics.completed++;statistics.lastDurationMs=Date.now()-started;});
-    const upstream=http.request({host:'127.0.0.1',port:localPort,path:req.url,method:req.method,headers:upstreamHeaders(req),agent},reply=>{
+    const upstream=http.request({host:'127.0.0.1',port:localPort,path:eventBudget?parsed.pathname+parsed.search:req.url,method:req.method,headers:upstreamHeaders(req),agent},reply=>{
       if(pathname(req.url)?.startsWith('/remote/')){
         statistics.remoteResponses++;if(reply.statusCode>=400)statistics.remoteErrors++;
       }
       // Preserve status, body, compression, cookies, CSP, cache policy and response length.
-      res.writeHead(reply.statusCode||502,stripHop(reply.headers));
-      reply.on('data',chunk=>statistics.responseBytes+=chunk.length);
-      pipeline(reply,res,()=>{});
+      const filtered=eventBudget&&reply.statusCode===200&&String(reply.headers['content-type']).startsWith('text/event-stream')&&!reply.headers['content-encoding'];
+      const headers=stripHop(reply.headers);if(filtered)delete headers['content-length'];
+      res.writeHead(reply.statusCode||502,headers);
+      const count=chunk=>{statistics.responseBytes+=chunk.length;meter.responseBytes+=chunk.length;};
+      if(filtered){const budget=egoEventsOnly();budget.on('data',count);pipeline(reply,budget,res,()=>{});}
+      else{reply.on('data',count);pipeline(reply,res,()=>{});}
     });
     upstream.on('error',()=>{
       if(cancelled||res.destroyed)return;
@@ -121,7 +148,7 @@ export function createGateway({publicOrigin,getTargetPort}){
   server.once('close',()=>agent.destroy());
   return {
     server,
-    snapshot:()=>({...statistics}),
+    snapshot:()=>({...statistics,traffic:structuredClone(traffic)}),
     listen:listenPort=>new Promise((resolve,reject)=>{
       server.once('error',reject);
       server.listen(listenPort,'127.0.0.1',()=>{server.removeListener('error',reject);resolve(server.address());});

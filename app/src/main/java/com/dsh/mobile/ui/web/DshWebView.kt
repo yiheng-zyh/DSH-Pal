@@ -51,7 +51,7 @@ fun DshWebView(
     val pageReadyScript = remember { context.assets.open("page-ready.js").bufferedReader().use { it.readText() } }
     val fileScript = remember {
         context.assets.open("web-files.js").bufferedReader().use { it.readText() }.replace("__DSH_FILE_AUTHORITY__", capabilities.exportAuthority) + "\n" +
-            context.assets.open("web-media.js").bufferedReader().use { it.readText() } + "\n" + context.assets.open("business-health.js").bufferedReader().use { it.readText() }
+            context.assets.open("web-media.js").bufferedReader().use { it.readText() } + "\n" + context.assets.open("ego-stream-budget.js").bufferedReader().use { it.readText() } + "\n" + context.assets.open("business-health.js").bufferedReader().use { it.readText() }
     }
     WebView.setWebContentsDebuggingEnabled(com.dsh.mobile.BuildConfig.WEB_INSPECTION)
 
