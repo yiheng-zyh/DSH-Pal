@@ -29,7 +29,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 /** Original compact launch choreography. Prior DSHgo attribution remains in third_party. */
 @Composable
 fun BootScreen(modifier:Modifier=Modifier,status:String="正在连接你的工作台…",progress:Int=0,
-               onRepair:(()->Unit)?=null,onDiagnostics:(()->Unit)?=null,onReload:(()->Unit)?=null) {
+               onRepair:(()->Unit)?=null,onDiagnostics:(()->Unit)?=null,onReload:(()->Unit)?=null,
+               browserResources:com.dsh.mobile.core.BusinessHealth=com.dsh.mobile.core.BusinessHealth()) {
     val colors=MiuixTheme.colorScheme
     val accent=LocalDshAccents.current.accent
     var elapsed by remember {mutableIntStateOf(0)}
@@ -82,10 +83,10 @@ fun BootScreen(modifier:Modifier=Modifier,status:String="正在连接你的工�
                 // resource figure replaces nothing and adds no block; it only
                 // appears once the cache has measured something, so an idle boot
                 // screen looks exactly as before.
-                val resourceDetail=com.dsh.mobile.core.ResourceLoadText.detail(resourceLoad)
-                if(resourceDetail!=null) {
-                    Text(resourceDetail,fontSize=11.sp,color=colors.onBackgroundVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
-                }
+                val resourceDetail=com.dsh.mobile.core.ResourceLoadText.detail(resourceLoad) ?: browserResources.resourceDetail()
+                Text(resourceDetail,fontSize=11.sp,color=colors.onBackgroundVariant,maxLines=3,overflow=TextOverflow.Ellipsis)
+                if(browserResources.resourceBytes>=0&&!resourceLoad.hasActivity)
+                    Text("体积在资源下载完成后更新",fontSize=10.sp,color=colors.onBackgroundVariant)
             }
             Spacer(Modifier.height(12.dp))
             Column(Modifier.fillMaxWidth().height(if(compact)92.dp else 140.dp).clip(RoundedCornerShape(16.dp))

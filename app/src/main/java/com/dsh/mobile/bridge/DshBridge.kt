@@ -153,7 +153,8 @@ class DshBridge(
                     lastBusinessSummary=summary
                     com.dsh.mobile.core.RunLog.info("Network","business $summary latencyMs=${health.lastLatencyMs}")
                 }
-                post { listener?.onBusinessHealth(health) }
+                val measured=health.copy(completedResources=data.optInt("completedResources").coerceIn(0,4096),resourceBytes=data.optLong("resourceBytes",-1).coerceAtLeast(-1))
+                post { listener?.onBusinessHealth(measured) }
             }
             "web-capability" -> {
                 val data = parsed.optJSONObject("payload")

@@ -452,6 +452,7 @@ fun ShellScreen(
                         onRepair = onUnpair,
                         onDiagnostics = onOpenDiagnostics,
                         onReload = retryStartup,
+                        browserResources = business,
                     )
                 }
 

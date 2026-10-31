@@ -43,10 +43,17 @@ object HealthProbe {
 }
 
 
-data class BusinessHealth(val sampleCount:Int=0,val failurePercent:Int=-1,val slowPending:Int=0,val resourceFailures:Int=0,val lastSuccessAgeMs:Long=-1,val lastLatencyMs:Long=0,val loadingResources:Int=0,val oldestResourceMs:Long=0,val restrictedPlugins:Int=0) {
+data class BusinessHealth(val sampleCount:Int=0,val failurePercent:Int=-1,val slowPending:Int=0,val resourceFailures:Int=0,val lastSuccessAgeMs:Long=-1,val lastLatencyMs:Long=0,val loadingResources:Int=0,val oldestResourceMs:Long=0,val restrictedPlugins:Int=0,val completedResources:Int=0,val resourceBytes:Long=-1) {
     val impaired get() = slowPending>0 || resourceFailures>0 || failurePercent>=20 || lastLatencyMs>=5_000
     val recoveryNeeded get() = resourceFailures>0 || failurePercent>=20
     val verified get() = !impaired && loadingResources==0 && lastSuccessAgeMs in 0..60_000
+    fun resourceDetail():String = buildList {
+        add("已完成 $completedResources 项")
+        add("正在加载 $loadingResources 项")
+        if(resourceBytes>=0)add("已加载 ${ResourceLoad.size(resourceBytes)}")
+        if(resourceFailures>0)add("失败 $resourceFailures 项")
+        if(loadingResources>0)add("最长等待 ${oldestResourceMs/1000} 秒")
+    }.joinToString(" · ")
 }
 enum class ConnectionQuality { DISCONNECTED, TRANSPORT_ONLY, DEGRADED, VERIFIED }
 object ConnectionQualityPolicy {
