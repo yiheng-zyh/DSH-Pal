@@ -1,5 +1,6 @@
 ﻿# ---- Android / Gradle ----
 .gradle/
+node_modules/
 .kotlin/
 .gradle-project-cache/
 build/
