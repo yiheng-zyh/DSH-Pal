@@ -3,6 +3,7 @@ import net from 'node:net';
 import {pipeline} from 'node:stream';
 import {origin,port} from './config.mjs';
 import {egoEventsOnly} from './ego-events.mjs';
+import {canRecoverLanding,unavailableLanding} from './unavailable.mjs';
 
 const protectedHeaders=new Set(['host','origin','cookie','authorization','x-forwarded-host','x-forwarded-for','x-forwarded-proto']);
 const hopHeaders=['connection','keep-alive','proxy-connection','proxy-authorization','proxy-authenticate','transfer-encoding','te','trailer','upgrade'];
@@ -84,7 +85,11 @@ export function createGateway({publicOrigin,getTargetPort}){
     meter.requests++;req.on('data',chunk=>meter.requestBytes+=chunk.length);
     if(!allowed(req)){res.writeHead(403,{'cache-control':'no-store'});res.end('Forbidden');return;}
     const localPort=target();
-    if(!localPort){res.writeHead(503,{'cache-control':'no-store','retry-after':'5'});res.end('Local DSH is not available');return;}
+    if(!localPort){
+      if(canRecoverLanding(req.method,req.url)){const page=unavailableLanding();res.writeHead(503,page.headers);res.end(page.body);}
+      else{res.writeHead(503,{'cache-control':'no-store','retry-after':'5'});res.end('Local DSH is not available');}
+      return;
+    }
     statistics.active++;
     let cancelled=false;
     const started=Date.now();
