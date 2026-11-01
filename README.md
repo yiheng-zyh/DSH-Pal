@@ -98,4 +98,8 @@ App 没有内置广告或分析 SDK；所用网络方案仍可能连接 Tailscal
 - 开发预览下载：**[Releases](https://github.com/yiheng-zyh/DSH-Pal/releases)** —— 最新为 `0.1.0-alpha.7`，标注 Pre-release，**不是稳定版**，请先读该版本的已知问题
 - 哔哩哔哩：<https://b23.tv/8o1bX3M>（「电脑还在跑，我先溜了！给 DSH 做个手机搭子｜DSH Pal 开源」）
 
+> **国内网络下载**：GitHub 直连不稳时，可给 Release 资产链接加镜像前缀 `https://gh-proxy.com/`，例如
+> `https://gh-proxy.com/https://github.com/yiheng-zyh/DSH-Pal/releases/download/v0.1.0-alpha.7/DSH-Pal-0.1.0-alpha.7.apk`
+> 该镜像经维护者实测可完整下载且 **SHA-256 与原包一致**（84,375,925 字节 / 约 14 秒）。其它常见镜像（ghfast.top、moeyy、ghproxy.cc、gitmirror 等）实测当时不可用或下载不完整，请务必用下面的 SHA-256 自行校验。
+
 > 从 `0.1.0-alpha.1` 起使用维护者专用发布签名。与更早的 debug 签名测试包**签名不同**，旧测试包不能直接覆盖升级；本版之后的版本可以正常覆盖更新。
