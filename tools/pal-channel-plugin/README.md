@@ -25,13 +25,55 @@ autoTunnel=true  + publicBaseUrl=""                → 走插件自带的 Cloudf
 
 ---
 
-## 二、它做哪三件事
+## 二、它做哪几件事
 
 | 能力 | 接口 | 说明 |
 |---|---|---|
 | 读当前走哪条 | `GET /api/pal-channel/status` | 返回当前通道、两条通道各自可用性 |
 | 切到另一条 | `POST /api/pal-channel/switch` | 预检 → 备份 → 改配置 → 重启隧道客户端 |
 | 记录前端日志 | `POST /api/pal-channel/client-log` | 前端出错时留下证据，不记录凭据 |
+| 读连接通道总览 | `GET /api/pal-channel/overview` | 所有通道状态 + 网关健康 + 本机 IPv6 体检 |
+| 开关直连入口 | `POST /api/pal-channel/direct` | 写 remote-access 配置，网关 5 秒热生效 |
+| 检查插件更新 | `GET /api/pal-channel/update` | 版本对比 + 更新公告（读仓库里的 `CHANGELOG.md`） |
+| 应用更新 | `POST /api/pal-channel/update/apply` | 整仓 `git pull --ff-only`；有未提交改动就拒绝 |
+
+### 连接通道总览（2026-11-06 新增）
+
+原先通道状态散在三处，而且没有一处是给用户看的：隧道在插件配置里、直连在
+`%LOCALAPPDATA%\DSHPal\remote-access\` 的 config/state 里、组网在手机 App 里。
+结果是功能存在，但用户（包括作者）只会得出一个结论——「好像没配」。
+
+总览把这些汇总成一份清单，用户在 **DSH 设置 → 连接通道总览** 里一眼看到：
+
+- 每条通道的状态：当前使用 / 已开启 / 可切换 / 未配置 / 已开启但未监听 / 手机端管理
+- 直连通道附地址与开关；开关写的是 remote-access 配置，网关 5 秒内热生效
+- 体检：本机公网 IPv6 数量 + remote-access 网关是否在跑
+
+两条如实原则（不是装饰）：
+
+1. **监听状态必须新鲜**：网关每 5 秒写一次 `state.json`，超过 20 秒没更新就判定它没在跑。
+   否则网关被切 Cloudflare 的流程杀掉后，面板会一直谎报「已监听」。
+2. **地址判据与网关同源**：直接复用 `direct.mjs` 的 `advertisableAddresses()`，
+   Teredo / WSL / Tailscale 等虚拟接口一律不算，保证「面板说有几个地址」与
+   「网关绑了几个监听」永远一致。
+
+### 更新检查与一键更新（2026-11-06 新增）
+
+面板会显示当前版本，并可以检查更新、查看更新公告、一键更新。
+
+**为什么一键更新是整仓 `git pull --ff-only`，而不是下载文件覆盖插件目录**：
+本插件与 `tools/remote-access` 共享代码（import 了它的 `config.mjs` / `direct.mjs` /
+`windows.mjs`）。只覆盖插件目录会拼出「新版插件 + 旧版工具」，直接加载失败，
+而且用户是在"更新成功"之后才发现插件没了。
+
+两道闸保证不吞掉用户的代码：
+
+1. 插件目录或 `tools/remote-access` 有未提交改动 → **拒绝更新**并列出是哪些文件；
+2. 不是 git 仓库 / 没有远程地址 → 拒绝并说明只能手动更新。
+
+`--ff-only` 只做快进：本地有提交分叉时直接失败，绝不偷偷合并。
+更新完成后**不自动重启 DSH**（在插件自己的请求里重启，响应会断在半路），
+界面会提示用户「重启 DSH 后生效」。
 
 ### 为什么挂在 `ctx.connection.fetch.register`
 
@@ -263,11 +305,17 @@ tools/pal-channel-plugin/
 │   ├── channel-service.js  读写通道状态、执行切换（业务逻辑）
 │   ├── fence.js            「本机桌面 ⇄ 远程设备」判定
 │   ├── preflight.js        切换前预检目标地址
-│   └── tunnel.js           隧道客户端启停协调
+│   ├── tunnel.js           隧道客户端启停协调
+│   ├── overview.js         连接通道总览：聚合隧道/直连/组网状态 + 本机体检
+│   ├── direct-service.js   直连入口开关（写 remote-access 配置）
+│   ├── update.js           更新检查 + 更新公告解析
+│   └── update-service.js   应用更新（整仓 git pull --ff-only，脏工作区拒绝）
 ├── test/
 │   ├── fence.test.mjs              安全边界（最该看的一份）
 │   ├── channel-roundtrip.test.mjs  读写往返
-│   └── switch-contract.test.mjs    切换契约
+│   ├── switch-contract.test.mjs    切换契约
+│   └── overview.test.mjs           通道总览 / 更新检查 / 直连开关
+├── CHANGELOG.md            更新公告（面板里的「更新内容」读它）
 ├── cordis.patch.yml        本插件自己的补丁声明
 ├── icon.svg                设置页图标
 ├── package.json            dsh.client 段（前端半边所需）
@@ -278,13 +326,13 @@ tools/pal-channel-plugin/
 
 ```powershell
 cd <项目目录>\tools\pal-channel-plugin
-node --test test/fence.test.mjs
-node --test test/channel-roundtrip.test.mjs
-node --test test/switch-contract.test.mjs
+node --test "test/*.test.mjs"
 ```
 
 `fence.test.mjs` 是安全边界的回归保护 —— **改 `fence.js` 前先看它**，
 它覆盖了「伪造 sec-fetch-mode / 带转发头 / Origin 不同源」等攻击情形。
+`overview.test.mjs` 守的是「面板说的话必须和事实一致」：陈旧 state.json 不能报监听、
+Teredo 不能算公网地址、脏工作区不能被更新覆盖。
 
 ## 八、相关文档
 

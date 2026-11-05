@@ -33,6 +33,12 @@ import { reconcileTunnel } from './tunnel.js';
 import {
   channelCatalog, findRemoteEntry, messageOf, readStatus, switchChannel,
 } from './channel-service.js';
+import {
+  buildChannelOverview, collectDirect, globalIpv6Addresses,
+} from './overview.js';
+import { setDirect } from './direct-service.js';
+import { checkUpdate, localVersion } from './update.js';
+import { applyUpdate } from './update-service.js';
 
 /** Cordis 插件名。 */
 export const name = 'pal-channel';
@@ -54,6 +60,17 @@ export const STATUS_PATH = '/api/pal-channel/status';
 export const SWITCH_PATH = '/api/pal-channel/switch';
 /** 浏览器半上报失败用的只写端点（见下方 client-log 注册处）。 */
 export const CLIENT_LOG_PATH = '/api/pal-channel/client-log';
+/**
+ * 连接通道总览。用户要回答的问题只有一句：「我到底有哪几条路能到电脑，
+ * 每条现在是什么状态」。数据源见 lib/overview.js。
+ */
+export const OVERVIEW_PATH = '/api/pal-channel/overview';
+/** 直连入口开关（写）。语义与 configure-direct.mjs 一致：请求体是完整期望集合。 */
+export const DIRECT_PATH = '/api/pal-channel/direct';
+/** 插件更新检查（只读，不下载不覆盖）。 */
+export const UPDATE_PATH = '/api/pal-channel/update';
+/** 应用更新（写）：git pull --ff-only。与检查分开，避免"打开面板就在改东西"。 */
+export const UPDATE_APPLY_PATH = '/api/pal-channel/update/apply';
 
 /**
  * 插件自己的诊断日志。
@@ -348,6 +365,117 @@ function applyUnsafe(ctx, config = {}) {
     },
   }));
 
+  // ---- 连接通道总览（只读）--------------------------------------------------
+  /**
+   * 为什么单独一条端点而不是塞进 /status：
+   * - `/status` 回答的是「当前走哪条隧道」，是切换动作的输入，字段少、要快；
+   * - 总览要把直连开关/监听、网关健康、本机 IPv6 体检一起纳入，读的是另一批
+   *   数据源（文件 + 网卡枚举），失败模式也不同。
+   * 合并成一条的后果是：任一诊断数据源卡住或报错，整块设置面板跟着不显示。
+   * 这里分开，总览读失败也只影响它自己。
+   */
+  disposers.push(ctx.connection.fetch.register({
+    path: OVERVIEW_PATH,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      if (!isLocalStatusRequest(headersObject(request))) {
+        return json(403, { ok: false, code: 'local-only', error: '通道总览只对本机桌面开放' });
+      }
+      // 隧道侧读不到（patch 路径缺失、YAML 改了语法等）不该让总览整块消失：
+      // 那条通道显示为不可用，其余通道照常展示。
+      let tunnel = { channel: null, channels: [] };
+      let tunnelError;
+      try {
+        tunnel = await readStatus(await depsFor());
+      } catch (error) {
+        tunnelError = messageOf(error);
+      }
+      try {
+        const directSnapshot = await collectDirect();
+        const overview = buildChannelOverview({
+          tunnel,
+          directSnapshot,
+          addresses: globalIpv6Addresses(),
+        });
+        // 版本号一并给出：面板要在同一个响应里同时回答「通道状态」和「插件版本」。
+        // 读不到版本就 null，界面显示「—」，不编造。
+        return json(200, { ok: true, ...overview, pluginVersion: await localVersion(), tunnelError });
+      } catch (error) {
+        return json(500, { ok: false, code: 'overview-failed', error: messageOf(error) });
+      }
+    },
+  }));
+
+  // ---- 直连入口开关（写）----------------------------------------------------
+  /**
+   * 写路径必须过 `isDesktopDirectRequest`（与切换隧道同一道围栏）：
+   * 远程配对设备本来就不该有能力改动这台电脑的对外监听面。
+   */
+  disposers.push(ctx.connection.fetch.register({
+    path: DIRECT_PATH,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      if (!isDesktopDirectRequest(headersObject(request))) {
+        return json(403, { ok: false, code: 'desktop-only', error: '直连开关只允许在本机桌面操作' });
+      }
+      if (!isJsonRequest(request)) {
+        return json(415, { ok: false, code: 'bad-content-type', error: 'content-type 必须是 application/json' });
+      }
+      const body = await readJsonBody(request);
+      if (body === undefined) {
+        return json(400, { ok: false, code: 'bad-body', error: '请求体必须是不超过 4KB 的 JSON 对象' });
+      }
+      try {
+        const result = await setDirect(body);
+        return json(result.status, result.body);
+      } catch (error) {
+        return json(500, { ok: false, code: 'internal', error: messageOf(error) });
+      }
+    },
+  }));
+
+  // ---- 插件更新检查（只读）--------------------------------------------------
+  disposers.push(ctx.connection.fetch.register({
+    path: UPDATE_PATH,
+    methods: ['GET'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      if (!isLocalStatusRequest(headersObject(request))) {
+        return json(403, { ok: false, code: 'local-only', error: '更新检查只对本机桌面开放' });
+      }
+      try {
+        return json(200, await checkUpdate());
+      } catch (error) {
+        return json(500, { ok: false, code: 'update-failed', error: messageOf(error) });
+      }
+    },
+  }));
+
+  // ---- 应用更新（写）--------------------------------------------------------
+  /**
+   * 更新是写操作，必须本机桌面直连。更新方式与安全边界见 lib/update-service.js：
+   * 整仓 `git pull --ff-only`，脏工作区直接拒绝。更新完成后**不重启 DSH** ——
+   * 在插件自己的请求里重启，响应会断在半路，用户看不到结果。
+   */
+  disposers.push(ctx.connection.fetch.register({
+    path: UPDATE_APPLY_PATH,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      if (!isDesktopDirectRequest(headersObject(request))) {
+        return json(403, { ok: false, code: 'desktop-only', error: '应用更新只允许在本机桌面操作' });
+      }
+      try {
+        const result = await applyUpdate();
+        return json(result.status, result.body);
+      } catch (error) {
+        return json(500, { ok: false, code: 'internal', error: messageOf(error) });
+      }
+    },
+  }));
+
   // ---- api/gate：为将来启用该 seam 的 cohort 保留 --------------------------
   /**
    * 上游把 `api/gate` 当作「配对/吊销的官方挂载点」，但当前官方运行时没有 emitter。
@@ -356,10 +484,18 @@ function applyUnsafe(ctx, config = {}) {
    */
   const gate = (request, _method, next) => {
     const path = typeof request?.url === 'string' ? request.url.split('?', 1)[0] : '';
-    const ours = path === STATUS_PATH || path === SWITCH_PATH;
+    const ours =
+      path === STATUS_PATH ||
+      path === SWITCH_PATH ||
+      path === OVERVIEW_PATH ||
+      path === DIRECT_PATH ||
+      path === UPDATE_PATH ||
+      path === UPDATE_APPLY_PATH;
     if (!ours) return next();
     const headers = request?.headers ?? {};
-    const local = path === SWITCH_PATH ? isDesktopDirectRequest(headers) : isLocalStatusRequest(headers);
+    // 写接口（switch / direct / 应用更新）要桌面直连；只读接口本机即可。
+    const write = path === SWITCH_PATH || path === DIRECT_PATH || path === UPDATE_APPLY_PATH;
+    const local = write ? isDesktopDirectRequest(headers) : isLocalStatusRequest(headers);
     return local ? next() : false;
   };
   ctx.effect(() => ctx.on('api/gate', gate), 'pal-channel: api gate');
