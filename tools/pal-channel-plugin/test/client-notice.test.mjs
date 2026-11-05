@@ -118,7 +118,39 @@ test('面板里的直连开关区块仍然注册在 settings.section，提醒层
   client.apply(ctx);
   assert.deepEqual(registered, [
     'settings.section#pal-channel',
-    'settings.section#pal-channel-channels',
     'shell.overlay#pal-channel-update-notice',
   ]);
+  assert.equal(
+    registered.filter((item) => item.startsWith('settings.section#')).length,
+    1,
+    '设置左侧导航只能有一个本插件的入口',
+  );
+});
+
+test('合并后的总览里同时有隧道切换按钮和直连开关，功能没有丢', () => {
+  const overview = {
+    ok: true,
+    pluginVersion: '0.1.0',
+    channels: [
+      { id: 'domestic', name: '国内 frp 隧道', group: 'public', configured: true, enabled: true, phase: 'current', origin: 'https://a.example:12451', detail: '' },
+      { id: 'cloudflare', name: 'Cloudflare 快速隧道', group: 'public', configured: true, enabled: false, phase: 'available', origin: null, detail: '已配置，可切换' },
+      { id: 'ipv6', name: 'IPv6 直连', group: 'direct', configured: true, enabled: true, phase: 'ready', origin: 'http://[2001:250::1]:18772', detail: '' },
+      { id: 'lan', name: 'Wi-Fi 直连', group: 'direct', configured: false, enabled: false, phase: 'off', origin: null, detail: '未开启' },
+      { id: 'mesh', name: '组网通道（Tailscale / WireGuard）', group: 'mesh', configured: null, enabled: null, phase: 'app-managed', origin: null, detail: '' },
+    ],
+    checks: {
+      ipv6: { count: 2, addresses: ['2001:250::1'] },
+      gateway: { running: true },
+      installed: true,
+      direct: { enabled: true, ipv6: true, lan: false },
+    },
+  };
+  const client = loadComponent(
+    makeReact([{ phase: 'ok', data: overview }, { phase: 'idle', data: null }, '', '', false, false]),
+  );
+  const text = JSON.stringify(client.ChannelsPanel());
+  assert.match(text, /switchTo/, '可用隧道要有「切到这条」按钮');
+  assert.match(text, /turnOn|turnOff/, '直连通道要有开关');
+  assert.match(text, /18772/, '要显示直连地址');
+  assert.match(text, /2001:250::1/, '地址要带出来');
 });

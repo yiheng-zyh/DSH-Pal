@@ -94,6 +94,7 @@ window.__ModuleLoader__.load({
       noticeUpdating: "更新中…",
       noticeDone: "已更新，重启 DSH 后生效",
       noticeUpToDate: "已是最新版本",
+      switchTo: "切到这条",
     };
     var en = {
       nav: "Public entry",
@@ -161,6 +162,7 @@ window.__ModuleLoader__.load({
       noticeUpdating: "Updating…",
       noticeDone: "Updated. Restart DSH to take effect",
       noticeUpToDate: "Already up to date",
+      switchTo: "Switch to this",
     };
 
     var t = function (k) {
@@ -721,6 +723,24 @@ window.__ModuleLoader__.load({
         });
       };
 
+      var onSwitchChannel = function (target) {
+        if (busy) return;
+        setBusy(target);
+        setMessage(t("switching"));
+        requestSwitch(target).then(function (result) {
+          setBusy("");
+          if (result.ok) {
+            setMessage(t("switched"));
+            reload();
+          } else {
+            var reason =
+              (result.body && (result.body.error || result.body.reason)) ||
+              "HTTP " + result.status;
+            setMessage(t("failed") + "：" + String(reason).slice(0, 160));
+          }
+        });
+      };
+
       var onCheckUpdate = function () {
         if (update.phase === "checking") return;
         if (confirming) setConfirming(false);
@@ -798,6 +818,25 @@ window.__ModuleLoader__.load({
                   },
                 },
                 busy === ch.id ? t("working") : on ? t("turnOff") : t("turnOn"),
+              ),
+            );
+          }
+          // 隧道通道的切换本来在另一个区块；合并后直接放在列表行里，
+          // 用户在同一屏就能"看见 + 操作"，不用在两个设置页之间来回跳。
+          if (ch.group === "public" && ch.configured === true && ch.phase !== "current") {
+            items.push(
+              React.createElement(
+                "button",
+                {
+                  key: "switch-channel",
+                  type: "button",
+                  disabled: busy === ch.id,
+                  style: S.btn,
+                  onClick: function () {
+                    onSwitchChannel(ch.id);
+                  },
+                },
+                busy === ch.id ? t("switching") : t("switchTo"),
               ),
             );
           }
@@ -907,151 +946,6 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function PalChannelPanel() {
-      var statusState = React.useState({ phase: "loading", data: null });
-      var status = statusState[0];
-      var setStatus = statusState[1];
-      var busyState = React.useState(false);
-      var busy = busyState[0];
-      var setBusy = busyState[1];
-      var msgState = React.useState("");
-      var message = msgState[0];
-      var setMessage = msgState[1];
-      var failState = React.useState(false);
-      var failed = failState[0];
-      var setFailed = failState[1];
-
-      React.useEffect(function () {
-        var alive = true;
-        var tick = function () {
-          readStatus().then(function (data) {
-            if (alive) setStatus({ phase: data ? "ok" : "unavailable", data: data });
-          });
-        };
-        tick();
-        var timer = setInterval(tick, 15000);
-        return function () {
-          alive = false;
-          clearInterval(timer);
-        };
-      }, []);
-
-      var data = status.data;
-      var current = (data && data.channel) || "";
-      var address = (data && data.publicBaseUrl) || "";
-
-      var onSwitch = function (target) {
-        if (busy || target === current) return;
-        setBusy(true);
-        setMessage(t("switching"));
-        setFailed(false);
-        requestSwitch(target).then(function (result) {
-          setBusy(false);
-          if (result.ok) {
-            setMessage(t("switched"));
-            readStatus().then(function (next) {
-              setStatus({ phase: next ? "ok" : "unavailable", data: next });
-            });
-          } else {
-            var reason =
-              (result.body && (result.body.error || result.body.reason)) ||
-              "HTTP " + result.status;
-            setMessage(t("failed") + "：" + String(reason).slice(0, 160));
-            setFailed(true);
-          }
-        });
-      };
-
-      var option = function (target, labelKey, hintKey) {
-        var active = current === target;
-        return React.createElement(
-          "button",
-          {
-            key: target,
-            type: "button",
-            disabled: busy || active,
-            onClick: function () {
-              onSwitch(target);
-            },
-            style: active ? Object.assign({}, S.option, S.optionActive) : S.option,
-          },
-          React.createElement(
-            "span",
-            { style: S.title },
-            (active ? "● " : "○ ") + t(labelKey),
-            active
-              ? React.createElement(
-                  "span",
-                  { style: { fontSize: "12px", opacity: 0.6, marginLeft: "8px" } },
-                  t("current"),
-                )
-              : null,
-          ),
-          React.createElement("span", { style: S.sub }, t(hintKey)),
-        );
-      };
-
-      var children = [React.createElement("p", { key: "hint", style: S.hint }, t("hint"))];
-
-      if (status.phase === "loading") {
-        children.push(React.createElement("div", { key: "loading", style: S.meta }, t("loading")));
-      } else {
-        children.push(option("domestic", "domestic", "domesticHint"));
-        children.push(option("cloudflare", "cloudflare", "cloudflareHint"));
-        if (address) {
-          children.push(
-            React.createElement(
-              "div",
-              { key: "addr", style: S.meta },
-              t("address") + "：" + address,
-            ),
-          );
-        }
-        if (status.phase === "unavailable") {
-          children.push(React.createElement("div", { key: "nan", style: S.meta }, t("unavailable")));
-        }
-      }
-      if (message) {
-        children.push(
-          React.createElement(
-            "div",
-            { key: "msg", style: failed ? Object.assign({}, S.message, S.error) : S.message },
-            message,
-          ),
-        );
-      }
-
-      return React.createElement(
-        "div",
-        {
-          style: S.box,
-          "data-dsh-plugin": "dsh-pal-channel",
-          "data-dsh-surface": "settings-modal",
-        },
-        children,
-      );
-    }
-
-    /** 把浏览器半的失败落到 host 日志，避免再次静默消失。 */
-    function reportFailure(stage, error) {
-      var detail = String((error && (error.stack || error.message)) || error).slice(0, 600);
-      try {
-        fetch("/api/pal-channel/client-log", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ stage: stage, detail: detail }),
-        }).catch(function () {});
-      } catch (e) {
-        /* 忽略 */
-      }
-      try {
-        console.error("[pal-channel] " + stage, error);
-      } catch (e) {
-        /* 忽略 */
-      }
-    }
-
     function apply(ctx) {
       try {
         var slots =
@@ -1076,6 +970,10 @@ window.__ModuleLoader__.load({
 
         // 关键：必须包在 slots.inject 里。workbuddy 注释原话：
         // 「注册一个还没声明的槽会直接抛错、整个纤维失败（面板就静默消失了）」。
+        //
+        // 只注册**一个** settings.section。早先拆成「公网入口」与「连接通道总览」两块，
+        // 结果是设置左侧导航多出一个重复入口 —— 两个区块讲的是同一件事（这台电脑有
+        // 哪几条路），用户得点两遍才看得到全貌。现在合并：总览列表里直接带隧道切换。
         ctx.effect(function () {
           var disposeSlot = slots.inject("settings.section", function () {
             return slots.register(
@@ -1083,28 +981,6 @@ window.__ModuleLoader__.load({
                 name: "settings.section",
                 id: "pal-channel",
                 order: 72,
-                label: function () {
-                  return bound("nav");
-                },
-                locale: NS,
-              },
-              PalChannelPanel,
-            );
-          });
-          return function () {
-            disposeSlot();
-          };
-        }, "pal-channel.panel");
-
-        // 通道总览是**另一个** settings.section：它大部分只读，只有直连开关会写配置；
-        // 和上面「切隧道」的区块分开，用户就不必担心打开设置页等于在改东西。
-        ctx.effect(function () {
-          var disposeSlot = slots.inject("settings.section", function () {
-            return slots.register(
-              {
-                name: "settings.section",
-                id: "pal-channel-channels",
-                order: 73,
                 label: function () {
                   return bound("channelsNav");
                 },
@@ -1116,7 +992,7 @@ window.__ModuleLoader__.load({
           return function () {
             disposeSlot();
           };
-        }, "pal-channel.channels-panel");
+        }, "pal-channel.panel");
 
         // 更新提醒挂 shell.overlay：覆盖在对话之上，用户不点掉就一直可见。
         // 槽位在老 cohort 里可能不存在，注入失败只少一个提醒，绝不能影响设置面板。
@@ -1149,7 +1025,6 @@ window.__ModuleLoader__.load({
     exports.name = "pal-channel-client";
     exports.apply = apply;
     exports.inject = ["slots", "locale"];
-    exports.PalChannelPanel = PalChannelPanel;
     exports.ChannelsPanel = ChannelsPanel;
     exports.UpdateNotice = UpdateNotice;
     return module.exports;
