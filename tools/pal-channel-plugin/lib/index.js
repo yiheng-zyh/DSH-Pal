@@ -437,6 +437,13 @@ function applyUnsafe(ctx, config = {}) {
   }));
 
   // ---- 插件更新检查（只读）--------------------------------------------------
+  /**
+   * 心跳检查会每隔几分钟就调一次这个端点，所以结果必须缓存：
+   * 不缓存的话每台装机每 10 分钟就要去打一次 jsDelivr/GitHub，既没必要也容易被限流。
+   * 缓存 30 分钟；带 `?fresh=1` 可以绕过（面板上「检查更新」按钮用）。
+   */
+  const UPDATE_CACHE_MS = 30 * 60 * 1000;
+  let updateCache = { at: 0, value: null };
   disposers.push(ctx.connection.fetch.register({
     path: UPDATE_PATH,
     methods: ['GET'],
@@ -446,7 +453,18 @@ function applyUnsafe(ctx, config = {}) {
         return json(403, { ok: false, code: 'local-only', error: '更新检查只对本机桌面开放' });
       }
       try {
-        return json(200, await checkUpdate());
+        let fresh = false;
+        try {
+          fresh = new URL(request.url).searchParams.get('fresh') === '1';
+        } catch {
+          // URL 解析失败就当普通缓存请求，不影响结论。
+        }
+        if (!fresh && updateCache.value && Date.now() - updateCache.at < UPDATE_CACHE_MS) {
+          return json(200, { ...updateCache.value, cached: true });
+        }
+        const value = await checkUpdate();
+        updateCache = { at: Date.now(), value };
+        return json(200, { ...value, cached: false });
       } catch (error) {
         return json(500, { ok: false, code: 'update-failed', error: messageOf(error) });
       }

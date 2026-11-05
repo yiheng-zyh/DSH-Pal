@@ -87,6 +87,13 @@ window.__ModuleLoader__.load({
       updateNoChange: "已是最新，没有文件变化",
       updateCancelled: "已取消（有未提交改动，或不是 git 安装）",
       cancel: "取消",
+      noticeTitle: "DSH Pal 通道插件有更新",
+      noticeMeta: "当前版本",
+      noticeLater: "稍后",
+      noticeUpdate: "立即更新",
+      noticeUpdating: "更新中…",
+      noticeDone: "已更新，重启 DSH 后生效",
+      noticeUpToDate: "已是最新版本",
     };
     var en = {
       nav: "Public entry",
@@ -147,6 +154,13 @@ window.__ModuleLoader__.load({
       updateNoChange: "Already up to date",
       updateCancelled: "Cancelled (uncommitted changes or not a git install)",
       cancel: "Cancel",
+      noticeTitle: "DSH Pal channel plugin update available",
+      noticeMeta: "Current version",
+      noticeLater: "Later",
+      noticeUpdate: "Update now",
+      noticeUpdating: "Updating…",
+      noticeDone: "Updated. Restart DSH to take effect",
+      noticeUpToDate: "Already up to date",
     };
 
     var t = function (k) {
@@ -243,6 +257,68 @@ window.__ModuleLoader__.load({
         fontSize: "13px",
         fontWeight: "600",
         margin: "14px 0 4px",
+      },
+      // ---- 更新提醒弹层（shell.overlay）-----------------------------------
+      // 宿主的 overlay 是定位容器，必须自己 fixed 居中。dsh-connect-workbuddy 的
+      // 注释里记过一次教训：画在 overlay 里不定位，会停在左上角成一个"没人认识的框"。
+      noticeLayer: {
+        position: "fixed",
+        inset: "0",
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+      },
+      noticeCard: {
+        width: "min(460px, calc(100vw - 32px))",
+        maxHeight: "calc(100vh - 64px)",
+        overflow: "auto",
+        background: "var(--dsw-alias-bg-layer-1, #161b22)",
+        border: "1px solid var(--dsw-alias-border-l1, #30363d)",
+        borderRadius: "12px",
+        padding: "18px",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+        color: "var(--dsw-alias-label-primary, #c9d1d9)",
+      },
+      noticeTitle: { fontSize: "15px", fontWeight: "600", margin: "0 0 6px" },
+      noticeMeta: {
+        fontSize: "12.5px",
+        color: "var(--dsw-alias-label-secondary, #8b949e)",
+        marginBottom: "10px",
+      },
+      noticeNotes: {
+        maxHeight: "220px",
+        overflowY: "auto",
+        margin: "8px 0 12px",
+        padding: "10px 12px",
+        borderRadius: "8px",
+        background: "var(--dsw-alias-bg-layer-2, rgba(255,255,255,0.03))",
+        border: "1px solid var(--dsw-alias-border-l1, #21262d)",
+      },
+      noticeActions: {
+        display: "flex",
+        justifyContent: "flex-end",
+        gap: "8px",
+        marginTop: "12px",
+      },
+      primaryBtn: {
+        fontSize: "13px",
+        padding: "6px 14px",
+        borderRadius: "7px",
+        border: "1px solid var(--dsw-alias-button-primary-fill, #4d6bfe)",
+        background: "var(--dsw-alias-button-primary-fill, #4d6bfe)",
+        color: "#fff",
+        cursor: "pointer",
+      },
+      linkBtn: {
+        fontSize: "13px",
+        padding: "6px 14px",
+        borderRadius: "7px",
+        border: "1px solid var(--dsw-alias-border-l1, #30363d)",
+        background: "transparent",
+        color: "inherit",
+        cursor: "pointer",
       },
     };
 
@@ -396,6 +472,182 @@ window.__ModuleLoader__.load({
      * 每条什么状态」。前者的动作是切换（会动配置），后者大部分只是看（只有直连
      * 开关会写配置）。混在一个区块里会让用户以为自己每次打开设置都在改东西。
      */
+    // ---- 更新提醒：心跳检查 + 前台弹层 ------------------------------------
+    /** 客户端心跳间隔。服务端缓存 30 分钟，所以实际外网请求频率远低于此。 */
+    var UPDATE_HEARTBEAT_MS = 10 * 60 * 1000;
+    /** 「稍后」只压住这一个版本；下次发新版会再弹，不会永久静默。 */
+    var DISMISS_KEY = "dsh-pal-channel:dismissed-version";
+
+    function readDismissed() {
+      try {
+        return window.localStorage.getItem(DISMISS_KEY) || "";
+      } catch (error) {
+        return "";
+      }
+    }
+    function writeDismissed(version) {
+      try {
+        if (version) window.localStorage.setItem(DISMISS_KEY, String(version));
+      } catch (error) {
+        // 隐私模式 / 壳内禁用 storage 时退化为仅本会话有效，不报错也不重复弹窗。
+      }
+    }
+
+    /**
+     * 更新提醒弹层（挂 `shell.overlay`，覆盖在对话之上）。
+     *
+     * 为什么必须有它：设置页里的「检查更新」要靠用户主动去点，而绝大多数用户
+     * 不会点 —— 结果就是「装了旧版永远不知道」。所以这里做三件事：
+     *   1. 打开 DSH 就自动检查一次，之后每 10 分钟一次（服务端缓存 30 分钟）；
+     *   2. 有新版本时在前台弹层提示，用户可「立即更新」或「稍后」；
+     *   3. 「稍后」只压住当前这个版本，下一个版本会重新提醒 —— 不能让用户不知情。
+     */
+    function UpdateNotice() {
+      var state = React.useState({ data: null, dismissed: readDismissed() });
+      var current = state[0];
+      var setState = state[1];
+      var applyingState = React.useState(false);
+      var applying = applyingState[0];
+      var setApplying = applyingState[1];
+      var resultState = React.useState(null);
+      var result = resultState[0];
+      var setResult = resultState[1];
+
+      React.useEffect(function () {
+        var alive = true;
+        var tick = function () {
+          fetch("/api/pal-channel/update", {
+            headers: { accept: "application/json" },
+            credentials: "same-origin",
+          })
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (data) {
+              if (!alive || !data) return;
+              setState({ data: data, dismissed: readDismissed() });
+            })
+            .catch(function () {
+              // 检查失败不打扰用户：网络不可达是常态，静默等下个心跳。
+            });
+        };
+        tick();
+        var timer = setInterval(tick, UPDATE_HEARTBEAT_MS);
+        return function () {
+          alive = false;
+          clearInterval(timer);
+        };
+      }, []);
+
+      var data = current.data;
+      if (!data || data.ok !== true || data.updateAvailable !== true) return null;
+      var latest = String(data.latest || "");
+      if (!latest || latest === current.dismissed) return null;
+
+      var notes = Array.isArray(data.notes) ? data.notes : [];
+
+      var onLater = function () {
+        writeDismissed(latest);
+        setState({ data: data, dismissed: latest });
+      };
+
+      var onUpdate = function () {
+        if (applying) return;
+        setApplying(true);
+        setResult(null);
+        fetch("/api/pal-channel/update/apply", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json" },
+          credentials: "same-origin",
+          body: "{}",
+        })
+          .then(function (r) {
+            return r.json().then(
+              function (v) {
+                return { ok: r.ok, body: v };
+              },
+              function () {
+                return { ok: r.ok, body: null };
+              },
+            );
+          })
+          .catch(function (e) {
+            return { ok: false, body: { error: String(e) } };
+          })
+          .then(function (outcome) {
+            setApplying(false);
+            var body = outcome.body || {};
+            if (outcome.ok) {
+              setResult({ kind: "done", text: body.note || t("noticeDone") });
+            } else {
+              setResult({
+                kind: "blocked",
+                text: String(body.error || body.code || "HTTP error").slice(0, 200),
+              });
+            }
+          });
+      };
+
+      var children = [
+        React.createElement("div", { key: "title", style: S.noticeTitle }, t("noticeTitle")),
+        React.createElement(
+          "div",
+          { key: "meta", style: S.noticeMeta },
+          t("noticeMeta") + " " + String(data.local || "—") + " → " + latest,
+        ),
+      ];
+      if (notes.length > 0) {
+        children.push(
+          React.createElement(
+            "div",
+            { key: "notes", style: S.noticeNotes },
+            notes.map(function (line, index) {
+              return React.createElement("div", { key: "n" + index, style: S.noteLine }, line);
+            }),
+          ),
+        );
+      }
+      if (result) {
+        children.push(
+          React.createElement(
+            "div",
+            { key: "result", style: result.kind === "done" ? S.noticeMeta : S.error },
+            result.text,
+          ),
+        );
+      }
+      children.push(
+        React.createElement(
+          "div",
+          { key: "actions", style: S.noticeActions },
+          React.createElement(
+            "button",
+            { type: "button", style: S.linkBtn, onClick: onLater },
+            t("noticeLater"),
+          ),
+          React.createElement(
+            "button",
+            { type: "button", style: S.primaryBtn, disabled: applying, onClick: onUpdate },
+            applying ? t("noticeUpdating") : t("noticeUpdate"),
+          ),
+        ),
+      );
+
+      return React.createElement(
+        "div",
+        {
+          style: S.noticeLayer,
+          "data-dsh-plugin": "dsh-pal-channel",
+          "data-dsh-surface": "update-notice",
+        },
+        React.createElement(
+          "div",
+          { style: S.noticeCard, role: "dialog", "aria-modal": "true" },
+          children,
+        ),
+      );
+    }
+
     function ChannelsPanel() {
       var statusState = React.useState({ phase: "loading", data: null });
       var status = statusState[0];
@@ -865,6 +1117,30 @@ window.__ModuleLoader__.load({
             disposeSlot();
           };
         }, "pal-channel.channels-panel");
+
+        // 更新提醒挂 shell.overlay：覆盖在对话之上，用户不点掉就一直可见。
+        // 槽位在老 cohort 里可能不存在，注入失败只少一个提醒，绝不能影响设置面板。
+        try {
+          ctx.effect(function () {
+            var disposeSlot = slots.inject("shell.overlay", function () {
+              return slots.register(
+                {
+                  name: "shell.overlay",
+                  id: "pal-channel-update-notice",
+                  order: 20,
+                  registrant: "dsh-pal-channel",
+                  locale: NS,
+                },
+                UpdateNotice,
+              );
+            });
+            return function () {
+              disposeSlot();
+            };
+          }, "pal-channel.update-notice");
+        } catch (error) {
+          reportFailure("update-notice", error);
+        }
       } catch (error) {
         reportFailure("apply", error);
       }
@@ -875,6 +1151,7 @@ window.__ModuleLoader__.load({
     exports.inject = ["slots", "locale"];
     exports.PalChannelPanel = PalChannelPanel;
     exports.ChannelsPanel = ChannelsPanel;
+    exports.UpdateNotice = UpdateNotice;
     return module.exports;
   },
 });
