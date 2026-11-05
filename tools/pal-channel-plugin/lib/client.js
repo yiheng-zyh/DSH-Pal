@@ -99,6 +99,8 @@ window.__ModuleLoader__.load({
       switchTo: "切到这条",
       showHelp: "怎么办",
       hideHelp: "收起",
+      showSetup: "配置说明",
+      openDoc: "打开完整文档",
     };
     var en = {
       nav: "Public entry",
@@ -171,6 +173,8 @@ window.__ModuleLoader__.load({
       switchTo: "Switch to this",
       showHelp: "What to do",
       hideHelp: "Hide",
+      showSetup: "Setup guide",
+      openDoc: "Open full docs",
     };
 
     var t = function (k) {
@@ -248,6 +252,13 @@ window.__ModuleLoader__.load({
         lineHeight: "1.7",
         color: "var(--dsw-alias-label-secondary, #8b949e)",
         marginBottom: "4px",
+      },
+      docLink: {
+        display: "inline-block",
+        marginTop: "6px",
+        fontSize: "12px",
+        color: "var(--dsw-alias-button-primary-fill, #4d6bfe)",
+        textDecoration: "none",
       },
       rowHead: {
         display: "flex",
@@ -816,6 +827,20 @@ window.__ModuleLoader__.load({
       };
 
       var rows = [];
+      // 「怎么办」与「配置说明」共用同一套步骤渲染，避免两处排版分叉。
+      var renderSteps = function (block) {
+        var children = [React.createElement("div", { key: "t", style: S.helpTitle }, block.title)];
+        (block.steps || []).forEach(function (step, stepIndex) {
+          children.push(
+            React.createElement(
+              "div",
+              { key: "s" + stepIndex, style: S.helpStep },
+              stepIndex + 1 + ". " + step,
+            ),
+          );
+        });
+        return children;
+      };
       if (status.phase === "loading") {
         rows.push(
           React.createElement("div", { key: "loading", style: S.meta }, t("channelsLoading")),
@@ -866,7 +891,8 @@ window.__ModuleLoader__.load({
           }
           // 每条路径各自一个「怎么办」按钮：哪条出问题就点哪条，不搞全局面板一个。
           if (ch.help) {
-            var helpOpen = expanded === ch.id;
+            var helpKey = ch.id + ":help";
+            var helpOpen = expanded === helpKey;
             items.push(
               React.createElement(
                 "button",
@@ -875,26 +901,53 @@ window.__ModuleLoader__.load({
                   type: "button",
                   style: Object.assign({}, S.btn, { marginLeft: "8px" }),
                   onClick: function () {
-                    setExpanded(helpOpen ? "" : ch.id);
+                    setExpanded(helpOpen ? "" : helpKey);
                   },
                 },
                 helpOpen ? t("hideHelp") : t("showHelp"),
               ),
             );
             if (helpOpen) {
-              var helpChildren = [
-                React.createElement("div", { key: "h-title", style: S.helpTitle }, ch.help.title),
-              ];
-              (ch.help.steps || []).forEach(function (step, stepIndex) {
-                helpChildren.push(
+              items.push(React.createElement("div", { key: "help-body", style: S.helpBox }, renderSteps(ch.help)));
+            }
+          }
+          // 每条路径各自一个「配置说明」：从零装到能用的步骤，正常状态下也能看。
+          // 和「怎么办」分开：前者是正向流程，后者是故障排查，混在一起会让人更懵。
+          if (ch.install) {
+            var setupKey = ch.id + ":install";
+            var setupOpen = expanded === setupKey;
+            items.push(
+              React.createElement(
+                "button",
+                {
+                  key: "setup-toggle",
+                  type: "button",
+                  style: Object.assign({}, S.btn, { marginLeft: "8px" }),
+                  onClick: function () {
+                    setExpanded(setupOpen ? "" : setupKey);
+                  },
+                },
+                setupOpen ? t("hideHelp") : t("showSetup"),
+              ),
+            );
+            if (setupOpen) {
+              var setupChildren = renderSteps(ch.install);
+              if (ch.install.docUrl) {
+                setupChildren.push(
                   React.createElement(
-                    "div",
-                    { key: "h-step-" + stepIndex, style: S.helpStep },
-                    stepIndex + 1 + ". " + step,
+                    "a",
+                    {
+                      key: "doc",
+                      href: ch.install.docUrl,
+                      target: "_blank",
+                      rel: "noreferrer noopener",
+                      style: S.docLink,
+                    },
+                    t("openDoc") + " ↗",
                   ),
                 );
-              });
-              items.push(React.createElement("div", { key: "help-body", style: S.helpBox }, helpChildren));
+              }
+              items.push(React.createElement("div", { key: "setup-body", style: S.helpBox }, setupChildren));
             }
           }
           if (ch.id === "ipv6" || ch.id === "lan") {

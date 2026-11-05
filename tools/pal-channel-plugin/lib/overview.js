@@ -533,6 +533,80 @@ export function helpForChannel(channel, { mesh = null } = {}) {
 }
 
 /**
+ * 「配置说明」—— 每条通道**从零装到能用**的步骤。
+ *
+ * 为什么和「怎么办」分开：
+ *   - 配置说明是**正向流程**（我还没装 / 我要从头配），正常状态下也要能看；
+ *   - 「怎么办」是**异常排障**（配了但连不上）。
+ * 两件事混在一起，刚上手的用户会先看到一堆报错排查，反而更懵。
+ *
+ * 面板里只放精简步骤；长文和图示在 docs/connections.md。
+ */
+export function installForChannel(channel) {
+  const docUrl = 'https://github.com/yiheng-zyh/DSH-Pal/blob/main/docs/connections.md';
+  switch (channel?.id) {
+    case 'domestic':
+      return {
+        title: '国内 frp：从注册到能用',
+        steps: [
+          '注册并实名：打开 natfrp.com 注册账号，完成实名认证（免费用户也要实名）。',
+          '创建隧道：管理面板 → 隧道 → 新建，记下「节点 ID」和「隧道 ID」。',
+          '保存访问密钥：在项目目录双击 tools/remote-access/save-sakura-token.cmd，粘贴管理面板里的访问密钥。',
+          '生成配置：node tools/remote-access/setup-sakura.mjs <隧道ID>，然后 node tools/remote-access/configure.mjs',
+          '启动网关：node tools/remote-access/run.mjs（长期用就再跑 install-autostart.ps1 设成开机自启）。',
+          '回到本页刷新，这条应变成「当前使用」；再用 node tools/remote-access/show-pair.mjs 出二维码给手机扫。',
+        ],
+        docUrl,
+      };
+    case 'cloudflare':
+      return {
+        title: 'Cloudflare 隧道：不用另外装',
+        steps: [
+          '这条由远控插件（dsh-remote-web-ui）自带，不需要单独安装任何东西。',
+          '在上面切到 Cloudflare 后，用插件面板的二维码扫码即可。',
+          'Quick 模式的地址每次重启都会变，变了就要重新配对；要固定地址需要用你自己域名的 Named 模式。',
+        ],
+        docUrl,
+      };
+    case 'ipv6':
+      return {
+        title: 'IPv6 直连：两端都要有 IPv6',
+        steps: [
+          '先确认两端都有公网 IPv6：电脑跑 curl -6 https://api6.ipify.org 有地址返回；手机在浏览器打开 test-ipv6.com 看 IPv6 一栏。',
+          '电脑开启直连入口：node tools/remote-access/configure-direct.mjs --ipv6（默认是关闭的，要显式开）。',
+          '路由器放行该端口的 TCP 入站（IPv6 不需要端口映射，但很多路由器默认开 IPv6 防火墙）。',
+          '生成二维码：node tools/remote-access/show-pair.mjs --via ipv6，手机 App 选「IPv6 直连」扫码。',
+          '不用时关掉：node tools/remote-access/configure-direct.mjs --off（公网地址等于多一个暴露面）。',
+        ],
+        docUrl,
+      };
+    case 'lan':
+      return {
+        title: 'Wi-Fi 直连：同一局域网最快',
+        steps: [
+          '让手机和电脑连同一个 Wi-Fi/路由器。',
+          '电脑开启局域网入口：node tools/remote-access/configure-direct.mjs --lan',
+          '生成二维码：node tools/remote-access/show-pair.mjs --via lan（多网卡时加 --address <手机所在网段的电脑IP>）。',
+          '手机 App 选「Wi-Fi 直连」扫码；出门后这条不可用，属正常。',
+        ],
+        docUrl,
+      };
+    case 'mesh':
+      return {
+        title: '组网通道：电脑准备 + 手机登录',
+        steps: [
+          'Tailscale（推荐）：电脑去 tailscale.com 下载安装并登录；手机 App → 连接管理 → 内置通道 → Tailscale → 登录同一账号。',
+          'WireGuard：手机 App 里的是客户端，电脑这边还要有服务端。可用 wg-easy 之类部署，再把手机的对端配置导进 App。',
+          '两边的账号/配置必须是同一套；只装客户端、没登录，等于没有通道。',
+        ],
+        docUrl,
+      };
+    default:
+      return null;
+  }
+}
+
+/**
  * 拼通道清单（纯函数）。
  * @param tunnel - 隧道侧：{channel, autoTunnel, publicBaseUrl, relay, channels[]}
  *   （来自 channel-service.js 的 readStatus，形状保持不变）
@@ -574,7 +648,7 @@ export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], m
         item.id === 'domestic'
           ? {
               text: '每天签到领流量',
-              url: 'https://www.natfrp.com/user/signin',
+              url: 'https://www.natfrp.com/user/',
               title:
                 'SakuraFrp 的免费流量需要每天签到领取，不签到可能没有可用额度（隧道会突然连不上）。' +
                 '每次签到给多少、能用多久，以官方签到页显示的当前额度与有效期为准。点这里打开官方签到页。',
@@ -595,10 +669,11 @@ export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], m
   channels.push(meshChannel(meshSnapshot));
 
   return {
-    // 每条通道都带一个「怎么办」：异常时点开就是可执行的排查步骤。
+    // 每条通道都带一个「怎么办」（异常时）和一个「配置说明」（从零装到能用）。
     channels: channels.map((channel) => ({
       ...channel,
       help: helpForChannel(channel, { mesh: meshSnapshot }),
+      install: installForChannel(channel),
     })),
     checks: {
       ipv6: {

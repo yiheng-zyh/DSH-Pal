@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   buildChannelOverview, collectDirect, directChannel, globalIpv6Addresses, helpForChannel,
+  installForChannel,
 } from '../lib/overview.js';
 import { compareVersions, checkUpdate, parseChangelog } from '../lib/update.js';
 import { applyUpdate } from '../lib/update-service.js';
@@ -275,6 +276,29 @@ test('直连开关：没有 config.json 时报 no-config，不创建半成品', 
   assert.equal(result.status, 409);
   assert.equal(result.body.code, 'no-config');
   await assert.rejects(fs.access(path.join(directory, 'config.json')));
+});
+
+test('每条通道都带「配置说明」，各条各有自己的安装流程', () => {
+  const overview = buildChannelOverview({
+    tunnel: {
+      channel: 'domestic',
+      channels: [
+        { id: 'domestic', name: '国内 frp 隧道', available: true, origin: 'https://a.example:12451' },
+        { id: 'cloudflare', name: 'Cloudflare 快速隧道', available: true, origin: null },
+      ],
+    },
+    directSnapshot: { direct: { enabled: false, ipv6: false, lan: false }, entries: [] },
+    addresses: [],
+  });
+  for (const channel of overview.channels) {
+    assert.ok(channel.install, `${channel.id} 必须有配置说明`);
+    assert.ok(Array.isArray(channel.install.steps) && channel.install.steps.length > 0);
+    assert.match(channel.install.docUrl, /^https:\/\/github\.com\//);
+  }
+  const domestic = overview.channels.find((c) => c.id === 'domestic');
+  assert.match(domestic.install.steps.join(' '), /实名/);
+  assert.match(domestic.install.steps.join(' '), /save-sakura-token\.cmd/);
+  assert.equal(installForChannel({ id: 'unknown-channel' }), null);
 });
 
 test('国内 frp 通道带「每天签到领流量」提醒，其它通道没有', () => {
