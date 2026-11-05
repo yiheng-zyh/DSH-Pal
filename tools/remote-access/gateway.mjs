@@ -1,9 +1,43 @@
 import http from 'node:http';
 import net from 'node:net';
+import os from 'node:os';
 import {pipeline} from 'node:stream';
 import {origin,port} from './config.mjs';
 import {egoEventsOnly} from './ego-events.mjs';
 import {canRecoverLanding,unavailableLanding} from './unavailable.mjs';
+
+/**
+ * 本机实际拥有的地址集合（用于区分「外部来访」与「本机自环」）。
+ *
+ * 为什么不能只判 127.0.0.1/::1：本机用**自己的公网地址**访问自己（自测、或网关
+ * 自己的探测）时，来源地址就是本机网卡地址，会被误判成"外部可达"。那会让面板
+ * 把"自己能连自己"报成"外面的人能连进来"。所以必须与本机全部地址比对。
+ * 网卡地址会变，60 秒刷新一次。
+ */
+let localAddressCache = { at: 0, set: new Set(['127.0.0.1', '::1']) };
+function localAddresses() {
+  if (Date.now() - localAddressCache.at < 60000) return localAddressCache.set;
+  const set = new Set(['127.0.0.1', '::1']);
+  try {
+    for (const list of Object.values(os.networkInterfaces())) {
+      for (const item of list ?? []) set.add(String(item.address || '').toLowerCase());
+    }
+  } catch {
+    // 取不到网卡就只认回环；宁可少算外部，也不能把自环当外部。
+  }
+  localAddressCache = { at: Date.now(), set };
+  return set;
+}
+/** 来源地址是否来自本机之外（去掉 ::ffff: 前缀与 zone id）。 */
+function isExternalRemote(remote) {
+  const text = String(remote || '').toLowerCase().split('%')[0];
+  if (!text) return false;
+  const bare = text.startsWith('::ffff:') ? text.slice(7).split('%')[0] : text;
+  const local = localAddresses();
+  if (local.has(bare) || local.has(text)) return false;
+  if (bare === '127.0.0.1' || bare.startsWith('127.')) return false;
+  return true;
+}
 
 const protectedHeaders=new Set(['host','origin','cookie','authorization','x-forwarded-host','x-forwarded-for','x-forwarded-proto']);
 const hopHeaders=['connection','keep-alive','proxy-connection','proxy-authorization','proxy-authenticate','transfer-encoding','te','trailer','upgrade'];
@@ -173,9 +207,22 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
     return headers;
   }
   /** 同一个请求处理器挂到主监听与每个直连监听；scheme 只影响统计与日志口径。 */
-  function attach(targetServer,isDirect){
+  function attach(targetServer,isDirect,stats){
     targetServer.on('request',(req,res)=>{
-      if(isDirect)statistics.directRequests++;
+      if(isDirect){
+        statistics.directRequests++;
+        /**
+         * 外部来访证据：直连入口上出现"非本机地址"的请求，是「入站真的通了」
+         * 唯一可靠的证据 —— 它不依赖任何第三方探测服务，对所有用户都成立：
+         * 手机只要通过直连入口连过一次（扫码配对或日常使用），这里就会记录。
+         * 本机自环（curl 自己的地址）会被 isExternalRemote 排除，不算数。
+         */
+        if(stats&&isExternalRemote(req.socket?.remoteAddress)){
+          stats.externalHits=(stats.externalHits??0)+1;
+          stats.lastExternalAt=new Date().toISOString();
+          stats.lastExternalRemote=String(req.socket?.remoteAddress??'');
+        }
+      }
       statistics.requests++;
       let trafficKey=trafficKind(req.url);
       if(!Object.hasOwn(traffic,trafficKey)&&Object.keys(traffic).length>=32)trafficKey='other';
@@ -333,12 +380,21 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
       states.push(state);
     }
     directState.length=0;directState.push(...states);
-    return directState;
+    return directState.map(withExternal);
+  }
+  /** 把某条直连入口的「外部来访」统计合并进快照（列表本身只存绑定结果）。 */
+  function withExternal(entry){
+    const definition=directListeners.get(`${entry.address}:${entry.port}`);
+    if(!definition?.stats)return entry;
+    return {...entry,externalHits:definition.stats.externalHits??0,
+      lastExternalAt:definition.stats.lastExternalAt??null};
   }
   function bindDirect(entry,key){
     return new Promise(resolve=>{
+      // 每条直连入口独立统计「外部来访」，用来如实回答「外面到底能不能连进来」。
+      const stats={externalHits:0,lastExternalAt:null,lastExternalRemote:null};
       const directServer=http.createServer();
-      attach(directServer,true);
+      attach(directServer,true,stats);
       const sockets=new Set();
       directServer.on('connection',socket=>{sockets.add(socket);socket.once('close',()=>sockets.delete(socket));});
       let settled=false;
@@ -362,8 +418,9 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
         // Host 白名单就会对不上，表现为「监听起来了但所有请求都 403」。
         const trustedHost=authorityOfHost(boundAddress,boundPort);
         const state={kind:entry.kind,address:boundAddress,port:boundPort,listening:true,error:undefined,
-          origin:`http://${trustedHost}`,trustedHost};
-        directListeners.set(key,{server:directServer,sockets,state});
+          origin:`http://${trustedHost}`,trustedHost,
+          externalHits:stats.externalHits??0,lastExternalAt:stats.lastExternalAt??null};
+        directListeners.set(key,{server:directServer,sockets,state,stats});
         settle(state);
       });
     });
@@ -373,7 +430,8 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
     server,
     snapshot:()=>({...statistics,traffic:structuredClone(traffic)}),
     // 快照用于写 state.json，克隆保证外部读到的是稳定副本。
-    directSnapshot:()=>structuredClone(directState),
+    // 合并「外部来访」统计：插件据此区分「只是本机绑上了」与「外面真的连进来过」。
+    directSnapshot:()=>structuredClone(directState.map(withExternal)),
     // 热路径（每个请求的 Host 校验）用只读实时视图，不做克隆。
     liveDirectEntries:()=>directState,
     syncDirect,

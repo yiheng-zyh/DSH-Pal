@@ -49,7 +49,7 @@ test('IPv6 体检：与网关同源，Teredo / ULA / 链路本地都不算', () 
   ]);
 });
 
-test('通道清单：隧道在前、直连居中、组网标注为手机端管理', () => {
+test('通道清单：隧道在前、直连居中、组网如实反映电脑侧准备情况', () => {
   const overview = buildChannelOverview({
     tunnel: {
       channel: 'domestic',
@@ -61,16 +61,74 @@ test('通道清单：隧道在前、直连居中、组网标注为手机端管�
     directSnapshot: {
       direct: { enabled: true, ipv6: true, lan: false },
       entries: [
-        { kind: 'ipv6', address: '2001:250::1', port: 18772, origin: 'http://[2001:250::1]:18772', listening: true },
+        {
+          kind: 'ipv6',
+          address: '2001:250::1',
+          port: 18772,
+          origin: 'http://[2001:250::1]:18772',
+          listening: true,
+          valid: true,
+          // 没有外部请求证据 → 只能是「外部未验证」，不能给绿色。
+        },
       ],
     },
     addresses: [{ address: '2001:250::1' }],
+    meshSnapshot: {
+      tailscale: { installed: true, running: true, online: true, account: 'me@github', ips: ['100.64.0.1'] },
+      wireguard: { installed: false, serving: false },
+    },
   });
   assert.deepEqual(overview.channels.map((c) => c.id), ['domestic', 'cloudflare', 'ipv6', 'lan', 'mesh']);
   assert.equal(overview.channels[0].phase, 'current');
-  assert.equal(overview.channels[2].phase, 'ready');
+  assert.equal(overview.channels[2].phase, 'unknown', '本机监听但无外部证据时不能绿');
+  assert.equal(overview.channels[2].external, 'unknown');
   assert.equal(overview.channels[3].phase, 'off');
-  assert.equal(overview.channels[4].phase, 'app-managed');
+  assert.equal(overview.channels[4].phase, 'ready');
+  assert.match(overview.channels[4].detail, /me@github/, '组网通道要显示登录账号');
+});
+
+test('直连通道：收到过外部请求才算外部已验证（绿色）', () => {
+  const verified = directChannel({
+    kind: 'ipv6',
+    label: 'IPv6 直连',
+    direct: { enabled: true, ipv6: true, lan: false },
+    entries: [
+      {
+        kind: 'ipv6',
+        address: '2001:250::1',
+        port: 18772,
+        origin: 'http://[2001:250::1]:18772',
+        listening: true,
+        valid: true,
+        lastExternalAt: new Date().toISOString(),
+      },
+    ],
+    addresses: [{ address: '2001:250::1' }],
+  });
+  assert.equal(verified.phase, 'ready');
+  assert.equal(verified.external, 'verified');
+});
+
+test('fe80 这类非公网地址即使被写进 state.json，也不会被当成链接', () => {
+  const channel = directChannel({
+    kind: 'ipv6',
+    label: 'IPv6 直连',
+    direct: { enabled: true, ipv6: true, lan: false },
+    entries: [
+      {
+        kind: 'ipv6',
+        address: 'fe80::1234:5678',
+        port: 18772,
+        origin: 'http://[fe80::1234:5678]:18772',
+        listening: true,
+        valid: false, // collectDirect 已经判过：链路本地不是公网地址
+      },
+    ],
+    addresses: [{ address: '2001:250::1' }],
+  });
+  assert.equal(channel.phase, 'pending', '只有非法地址时等于没绑上');
+  assert.equal(channel.origin, null, '绝不能让 fe80 变成可点链接');
+  assert.match(channel.detail, /已忽略 1 个非公网地址/);
 });
 
 test('直连通道：开了但没绑上要说 pending，而不是谎报 ready', () => {

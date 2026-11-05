@@ -34,7 +34,7 @@ import {
   channelCatalog, findRemoteEntry, messageOf, readStatus, switchChannel,
 } from './channel-service.js';
 import {
-  buildChannelOverview, collectDirect, globalIpv6Addresses,
+  buildChannelOverview, collectDirect, collectMesh, globalIpv6Addresses,
 } from './overview.js';
 import { setDirect } from './direct-service.js';
 import { checkUpdate, localVersion } from './update.js';
@@ -365,6 +365,17 @@ function applyUnsafe(ctx, config = {}) {
     },
   }));
 
+  // 组网探测要起子进程查 tailscale / sc，40~500ms 一次；面板每 20 秒轮询，
+// 60 秒缓存既够及时也不至于把进程表刷爆。
+  const MESH_CACHE_MS = 60 * 1000;
+  let meshCache = { at: 0, value: null };
+  const meshSnapshotCached = async () => {
+    if (meshCache.value && Date.now() - meshCache.at < MESH_CACHE_MS) return meshCache.value;
+    const value = await collectMesh();
+    meshCache = { at: Date.now(), value };
+    return value;
+  };
+
   // ---- 连接通道总览（只读）--------------------------------------------------
   /**
    * 为什么单独一条端点而不是塞进 /status：
@@ -393,10 +404,14 @@ function applyUnsafe(ctx, config = {}) {
       }
       try {
         const directSnapshot = await collectDirect();
+        // 组网探测要跑两条命令（tailscale status / sc query），60 秒缓存足够：
+        // 用户不会一分钟内反复登录/退出 Tailscale，但面板每 20 秒就轮询一次。
+        const meshSnapshot = await meshSnapshotCached();
         const overview = buildChannelOverview({
           tunnel,
           directSnapshot,
           addresses: globalIpv6Addresses(),
+          meshSnapshot,
         });
         // 版本号一并给出：面板要在同一个响应里同时回答「通道状态」和「插件版本」。
         // 读不到版本就 null，界面显示「—」，不编造。

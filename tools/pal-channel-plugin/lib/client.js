@@ -56,6 +56,8 @@ window.__ModuleLoader__.load({
       phaseAvailable: "可切换",
       phaseUnconfigured: "未配置",
       phasePending: "已开启但未监听",
+      phaseUnknown: "外部未验证",
+      phaseBlocked: "外部连不上",
       phaseOff: "未开启",
       phaseAppManaged: "手机端管理",
       groupPublic: "公网",
@@ -123,6 +125,8 @@ window.__ModuleLoader__.load({
       phaseAvailable: "Available",
       phaseUnconfigured: "Not configured",
       phasePending: "On but not listening",
+      phaseUnknown: "Not verified externally",
+      phaseBlocked: "Unreachable externally",
       phaseOff: "Off",
       phaseAppManaged: "Managed on phone",
       groupPublic: "Public",
@@ -450,18 +454,23 @@ window.__ModuleLoader__.load({
     var PHASE_COLOR = {
       current: "#3fb950",
       ready: "#3fb950",
+      // 本机绑上了但还没证明外面能连进来 —— 必须是黄色，不能给绿色。
+      unknown: "#d29922",
       available: "#8b949e",
       unconfigured: "#6e7681",
       pending: "#d29922",
+      blocked: "#f85149",
       off: "#6e7681",
       "app-managed": "#8b949e",
     };
     var PHASE_KEY = {
       current: "phaseCurrent",
       ready: "phaseReady",
+      unknown: "phaseUnknown",
       available: "phaseAvailable",
       unconfigured: "phaseUnconfigured",
       pending: "phasePending",
+      blocked: "phaseBlocked",
       off: "phaseOff",
       "app-managed": "phaseAppManaged",
     };
