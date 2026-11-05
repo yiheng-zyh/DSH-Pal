@@ -561,6 +561,25 @@ export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], m
         : item.available === true
           ? '已配置，可切换'
           : '未配置',
+      /**
+       * 国内 frp 的免费流量需要**每天签到领取**。不签到就没有可用额度，
+       * 表现是「隧道突然连不上」，用户很容易以为是软件坏了。
+       *
+       * 文案刻意不写死「每天 2GB」「一个月有效」这类数字：SakuraFrp 官方公开文档
+       * 里没有写明签到流量的额度与有效期（查过文档站 sitemap 全量与账户/付款/基础
+       * 相关页面），实际数值只在其用户中心的签到页动态显示。写死会误导用户，
+       * 所以统一表述为「以官方签到页显示为准」。
+       */
+      notice:
+        item.id === 'domestic'
+          ? {
+              text: '每天签到领流量',
+              url: 'https://www.natfrp.com/user/signin',
+              title:
+                'SakuraFrp 的免费流量需要每天签到领取，不签到可能没有可用额度（隧道会突然连不上）。' +
+                '每次签到给多少、能用多久，以官方签到页显示的当前额度与有效期为准。点这里打开官方签到页。',
+            }
+          : null,
     });
   }
 

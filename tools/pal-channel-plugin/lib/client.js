@@ -256,6 +256,20 @@ window.__ModuleLoader__.load({
         gap: "8px",
       },
       rowName: { fontSize: "13.5px" },
+      // 名称后的轻量提醒：11px、细边框、次要色，不占布局也不抢眼。
+      noticeBadge: {
+        display: "inline-block",
+        marginLeft: "8px",
+        padding: "0 7px",
+        fontSize: "11px",
+        lineHeight: "17px",
+        borderRadius: "9px",
+        border: "1px solid var(--dsw-alias-border-l1, #30363d)",
+        color: "var(--dsw-alias-label-secondary, #8b949e)",
+        textDecoration: "none",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+      },
       phase: {
         fontSize: "12px",
         whiteSpace: "nowrap",
@@ -825,6 +839,21 @@ window.__ModuleLoader__.load({
                   "● ",
                 ),
                 React.createElement("span", { style: S.rowName }, ch.name),
+                // 国内 frp 的免费流量要每天签到；点这里直接去官方签到页。
+                ch.notice
+                  ? React.createElement(
+                      "a",
+                      {
+                        key: "notice",
+                        href: ch.notice.url,
+                        target: "_blank",
+                        rel: "noreferrer noopener",
+                        style: S.noticeBadge,
+                        title: ch.notice.title,
+                      },
+                      ch.notice.text,
+                    )
+                  : null,
               ),
               React.createElement("span", { style: S.phase }, t(PHASE_KEY[ch.phase] || ch.phase)),
             ),

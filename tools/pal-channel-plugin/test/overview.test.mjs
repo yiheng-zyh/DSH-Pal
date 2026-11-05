@@ -277,6 +277,28 @@ test('直连开关：没有 config.json 时报 no-config，不创建半成品', 
   await assert.rejects(fs.access(path.join(directory, 'config.json')));
 });
 
+test('国内 frp 通道带「每天签到领流量」提醒，其它通道没有', () => {
+  const overview = buildChannelOverview({
+    tunnel: {
+      channel: 'domestic',
+      channels: [
+        { id: 'domestic', name: '国内 frp 隧道', available: true, origin: 'https://a.example:12451' },
+        { id: 'cloudflare', name: 'Cloudflare 快速隧道', available: true, origin: null },
+      ],
+    },
+    directSnapshot: { direct: { enabled: false, ipv6: false, lan: false }, entries: [] },
+    addresses: [],
+  });
+  const domestic = overview.channels.find((c) => c.id === 'domestic');
+  assert.ok(domestic.notice, '国内 frp 必须有签到提醒');
+  assert.match(domestic.notice.text, /签到/);
+  assert.match(domestic.notice.url, /^https:\/\/www\.natfrp\.com\//);
+  // 官方公开文档没写死签到额度与有效期，文案里也不许写死（避免误导）。
+  assert.doesNotMatch(domestic.notice.title, /\d+\s*GB/i);
+  assert.match(domestic.notice.title, /以官方签到页/);
+  assert.equal(overview.channels.find((c) => c.id === 'cloudflare').notice, null);
+});
+
 test('版本比较：分段数字比较，兼容 v 前缀与预发布后缀', () => {
   assert.equal(compareVersions('0.1.10', '0.1.9') > 0, true);
   assert.equal(compareVersions('v0.2.0', '0.1.99') > 0, true);
