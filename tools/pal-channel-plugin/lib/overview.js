@@ -454,6 +454,85 @@ export function meshChannel(mesh) {
 }
 
 /**
+ * 「怎么办」—— 通道异常时给用户可执行的下一步。
+ *
+ * 排序原则：先给**他自己能做的**（手机自测），再给**要动路由器的**，
+ * 最后才是"换通道"。不写"请检查防火墙"这种废话：要说清在哪、点什么、
+ * 成功长什么样 —— 用户不是网络工程师。
+ */
+export function helpForChannel(channel, { mesh = null } = {}) {
+  if (!channel) return null;
+  if (['ready', 'current', 'available'].includes(channel.phase)) return null;
+
+  if (channel.id === 'ipv6' || channel.id === 'lan') {
+    const target = channel.origin
+      ? `${channel.origin}/api/pair/status`
+      : channel.id === 'ipv6'
+        ? 'http://[电脑的IPv6地址]:18772/api/pair/status'
+        : 'http://电脑局域网IP:18772/api/pair/status';
+    if (channel.phase === 'pending') {
+      return {
+        title: '开了但没绑上？',
+        steps: [
+          '等 5 秒再刷新：网关每 5 秒热重载一次直连配置。',
+          '看面板底部「网关」是否显示运行中；没运行就让电脑上的 remote-access 网关先跑起来。',
+          channel.id === 'ipv6'
+            ? '看面板底部「本机公网 IPv6」是否大于 0；为 0 说明当前网络没有公网 IPv6，这条路本来就不通。'
+            : '在 Windows 上跑 `ipconfig`，确认本机有 192.168.x / 10.x 这类局域网地址。',
+        ],
+      };
+    }
+    // IPv6 与局域网是两条不同的路，排查点完全不同，不能共用一套文案。
+    if (channel.id === 'ipv6') {
+      return {
+        title: '本机开着，但外面可能连不进来 —— 按这个顺序查',
+        steps: [
+          `先用手机自测：关掉 Wi-Fi、改用蜂窝数据，浏览器打开 ${target}。看到 JSON 就是通的（回电脑点一次配对，面板会转绿）。`,
+          '打不开最常见的原因是路由器没放行：登录路由器后台 → 找「IPv6 防火墙 / 端口放行 / 通信规则」→ 允许这台电脑该端口的 TCP 入站。各家菜单名不同：小米叫「IPv6 防火墙」，华为在「IPv6」里，OpenWrt 在「防火墙 → 通信规则」。',
+          '路由器已放行仍不通 → 校园网 / 企业网 / 部分运营商禁止入站，这条直连走不通，改用国内隧道或 Tailscale。',
+          'Windows 防火墙：工具已做只读检查；若显示 no-node-allow-rule，需要手工放行该端口的 TCP 入站（IPv4 与 IPv6 都要）。',
+        ],
+      };
+    }
+    return {
+      title: 'Wi-Fi 直连不通？按这个顺序查',
+      steps: [
+        `先确认手机和电脑连的是**同一个 Wi-Fi**，然后用手机浏览器打开 ${target}。能看到 JSON 就是通的。`,
+        '打不开最常见的是「AP 隔离 / 无线隔离」：很多路由器默认开启，开着时同一 Wi-Fi 的设备互相看不见。登录路由器后台关掉它（有的叫「AP 隔离」「客户端隔离」「无线隔离」）。',
+        'Windows 防火墙：工具已做只读检查；若显示 no-node-allow-rule，需要放行该端口的 TCP 入站。注意网络位置要是「专用网络」，被认成「公用网络」时入站规则不生效。',
+        '换过网络后电脑的局域网 IP 会变：用面板上显示的地址重新生成二维码，不要用旧的。',
+      ],
+    };
+  }
+
+  if (channel.id === 'mesh') {
+    const ts = mesh?.tailscale;
+    const wg = mesh?.wireguard;
+    const steps = [];
+    if (!ts?.installed) steps.push('没装 Tailscale：去 tailscale.com 下载安装，登录后这台电脑就是组网节点。');
+    else if (!ts?.running) steps.push('Tailscale 装了但没登录/没连上：打开托盘图标登录，状态变成 Running 就正常了。');
+    if (!wg?.installed) steps.push('没装 WireGuard：手机 App 的「内置 WireGuard」是客户端，电脑这边需要服务端，只装客户端不够。');
+    else if (!wg?.serving) steps.push('WireGuard 装了但没有运行中的隧道：需要部署服务端并把手机的对端配置导进去（可用 wg-easy 这类面板部署）。');
+    if (steps.length === 0) return null;
+    return { title: '组网通道没准备好？', steps };
+  }
+
+  return {
+    title: '这条公网通道还没配',
+    steps:
+      channel.id === 'domestic'
+        ? [
+            '按 docs/connections.md 配国内 frp：注册 Sakura → 建隧道 → 保存访问密钥 → 生成 remote-access 配置。',
+            '配好后回到这里刷新，状态会变成「可切换」。',
+          ]
+        : [
+            'Cloudflare 快速隧道由远控插件自带，不用额外配置；切过去后用插件面板的二维码。',
+            '切之前先确认手机已能用任一条通道连上，否则切过去可能找不到入口。',
+          ],
+  };
+}
+
+/**
  * 拼通道清单（纯函数）。
  * @param tunnel - 隧道侧：{channel, autoTunnel, publicBaseUrl, relay, channels[]}
  *   （来自 channel-service.js 的 readStatus，形状保持不变）
@@ -497,7 +576,11 @@ export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], m
   channels.push(meshChannel(meshSnapshot));
 
   return {
-    channels,
+    // 每条通道都带一个「怎么办」：异常时点开就是可执行的排查步骤。
+    channels: channels.map((channel) => ({
+      ...channel,
+      help: helpForChannel(channel, { mesh: meshSnapshot }),
+    })),
     checks: {
       ipv6: {
         count: addresses.length,

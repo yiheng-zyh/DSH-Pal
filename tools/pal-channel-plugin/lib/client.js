@@ -97,6 +97,8 @@ window.__ModuleLoader__.load({
       noticeDone: "已更新，重启 DSH 后生效",
       noticeUpToDate: "已是最新版本",
       switchTo: "切到这条",
+      showHelp: "怎么办",
+      hideHelp: "收起",
     };
     var en = {
       nav: "Public entry",
@@ -167,6 +169,8 @@ window.__ModuleLoader__.load({
       noticeDone: "Updated. Restart DSH to take effect",
       noticeUpToDate: "Already up to date",
       switchTo: "Switch to this",
+      showHelp: "What to do",
+      hideHelp: "Hide",
     };
 
     var t = function (k) {
@@ -230,6 +234,20 @@ window.__ModuleLoader__.load({
         lineHeight: "1.7",
         color: "var(--dsw-alias-label-secondary, #8b949e)",
         paddingLeft: "2px",
+      },
+      helpBox: {
+        marginTop: "8px",
+        padding: "10px 12px",
+        borderRadius: "8px",
+        background: "var(--dsw-alias-bg-layer-2, rgba(255,255,255,0.03))",
+        border: "1px solid var(--dsw-alias-border-l1, #21262d)",
+      },
+      helpTitle: { fontSize: "12.5px", fontWeight: "600", marginBottom: "6px" },
+      helpStep: {
+        fontSize: "12px",
+        lineHeight: "1.7",
+        color: "var(--dsw-alias-label-secondary, #8b949e)",
+        marginBottom: "4px",
       },
       rowHead: {
         display: "flex",
@@ -680,6 +698,10 @@ window.__ModuleLoader__.load({
       var applyingState = React.useState(false);
       var applying = applyingState[0];
       var setApplying = applyingState[1];
+      // 每条路径各自一个「怎么办」：记录当前展开的是哪一条，不共用一个按钮。
+      var expandedState = React.useState("");
+      var expanded = expandedState[0];
+      var setExpanded = expandedState[1];
 
       var reload = function () {
         return readOverview().then(function (data) {
@@ -809,8 +831,42 @@ window.__ModuleLoader__.load({
           ];
           if (ch.origin) {
             items.push(React.createElement("div", { key: "origin", style: S.url }, ch.origin));
-          } else if (ch.detail) {
+          }
+          if (ch.detail) {
             items.push(React.createElement("div", { key: "detail", style: S.url }, ch.detail));
+          }
+          // 每条路径各自一个「怎么办」按钮：哪条出问题就点哪条，不搞全局面板一个。
+          if (ch.help) {
+            var helpOpen = expanded === ch.id;
+            items.push(
+              React.createElement(
+                "button",
+                {
+                  key: "help-toggle",
+                  type: "button",
+                  style: Object.assign({}, S.btn, { marginLeft: "8px" }),
+                  onClick: function () {
+                    setExpanded(helpOpen ? "" : ch.id);
+                  },
+                },
+                helpOpen ? t("hideHelp") : t("showHelp"),
+              ),
+            );
+            if (helpOpen) {
+              var helpChildren = [
+                React.createElement("div", { key: "h-title", style: S.helpTitle }, ch.help.title),
+              ];
+              (ch.help.steps || []).forEach(function (step, stepIndex) {
+                helpChildren.push(
+                  React.createElement(
+                    "div",
+                    { key: "h-step-" + stepIndex, style: S.helpStep },
+                    stepIndex + 1 + ". " + step,
+                  ),
+                );
+              });
+              items.push(React.createElement("div", { key: "help-body", style: S.helpBox }, helpChildren));
+            }
           }
           if (ch.id === "ipv6" || ch.id === "lan") {
             var on = direct[ch.id] === true;

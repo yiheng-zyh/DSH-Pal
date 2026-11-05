@@ -13,7 +13,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  buildChannelOverview, collectDirect, directChannel, globalIpv6Addresses,
+  buildChannelOverview, collectDirect, directChannel, globalIpv6Addresses, helpForChannel,
 } from '../lib/overview.js';
 import { compareVersions, checkUpdate, parseChangelog } from '../lib/update.js';
 import { applyUpdate } from '../lib/update-service.js';
@@ -129,6 +129,65 @@ test('fe80 这类非公网地址即使被写进 state.json，也不会被当成�
   assert.equal(channel.phase, 'pending', '只有非法地址时等于没绑上');
   assert.equal(channel.origin, null, '绝不能让 fe80 变成可点链接');
   assert.match(channel.detail, /已忽略 1 个非公网地址/);
+});
+
+test('每条异常通道各有一个「怎么办」，且 IPv6 与局域网给的是各自的排查项', () => {
+  const ipv6 = directChannel({
+    kind: 'ipv6',
+    label: 'IPv6 直连',
+    direct: { enabled: true, ipv6: true, lan: false },
+    entries: [
+      {
+        kind: 'ipv6',
+        address: '2001:250::1',
+        port: 18772,
+        origin: 'http://[2001:250::1]:18772',
+        listening: true,
+        valid: true,
+      },
+    ],
+    addresses: [{ address: '2001:250::1' }],
+  });
+  const ipv6Help = helpForChannel(ipv6);
+  assert.ok(ipv6Help, '未验证时必须有怎么办');
+  assert.match(ipv6Help.steps.join(' '), /路由器/);
+  assert.match(ipv6Help.steps.join(' '), /IPv6 防火墙/);
+
+  const lan = directChannel({
+    kind: 'lan',
+    label: 'Wi-Fi 直连',
+    direct: { enabled: true, ipv6: false, lan: true },
+    entries: [
+      {
+        kind: 'lan',
+        address: '192.168.1.5',
+        port: 18772,
+        origin: 'http://192.168.1.5:18772',
+        listening: true,
+        valid: true,
+      },
+    ],
+    addresses: [],
+  });
+  const lanHelp = helpForChannel(lan);
+  assert.ok(lanHelp, '未验证时必须有怎么办');
+  assert.match(lanHelp.steps.join(' '), /AP 隔离/, '局域网排查要说 AP 隔离');
+  assert.doesNotMatch(lanHelp.steps.join(' '), /IPv6 防火墙/, '局域网不该提 IPv6 防火墙');
+
+  // 正常通道不该多一个按钮打扰用户。
+  const ready = { ...ipv6, phase: 'ready' };
+  assert.equal(helpForChannel(ready), null);
+});
+
+test('组网通道没准备好时，给出缺什么就装什么的步骤', () => {
+  const help = helpForChannel(
+    { id: 'mesh', phase: 'pending' },
+    { mesh: { tailscale: { installed: true, running: false }, wireguard: { installed: false, serving: false } } },
+  );
+  assert.ok(help);
+  const text = help.steps.join(' ');
+  assert.match(text, /Tailscale 装了但没登录/);
+  assert.match(text, /没装 WireGuard/);
 });
 
 test('直连通道：开了但没绑上要说 pending，而不是谎报 ready', () => {
