@@ -1,0 +1,326 @@
+// Adapted from DSHgo (MIT), Copyright (c) 2026 Fa2517.
+// See third_party/DSHgo-MIT-LICENSE.
+package com.dsh.mobile.vpn;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import java.net.NetworkInterface;
+import android.os.Build;
+import android.provider.Settings;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.Log;
+
+import org.json.JSONArray;
+
+import java.io.FileDescriptor;
+import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.Set;
+
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+
+/**
+ * libtailscale.AppContext implementation: durable encrypted key/value store
+ * backed by the Android Keystore plus the small device facts the engine asks
+ * for. Nothing here leaves the device.
+ */
+public final class TunnelStore implements libtailscale.AppContext {
+
+    private static final String TAG = "DSHTunnelStore";
+    private static final String PREFS = "dsh_mobile_vpn_secrets";
+    private static final String INDEX = "dsh_mobile_vpn_index";
+    private static final String KEY_ALIAS = "dsh_mobile_vpn_master";
+    private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
+
+    private final Context ctx;
+    private final SharedPreferences prefs;
+    private final SharedPreferences index;
+    private static volatile String lastStage = "";
+    private static volatile long lastStageAt;
+
+    public TunnelStore(Context ctx) { this(ctx, "tailscale"); }
+    public TunnelStore(Context ctx, String namespace) {
+        if (!namespace.equals("tailscale") && !namespace.equals("wireguard")) throw new IllegalArgumentException("Unknown vault");
+        this.ctx = ctx;
+        this.prefs = ctx.getSharedPreferences(PREFS + "_" + namespace, Context.MODE_PRIVATE);
+        this.index = ctx.getSharedPreferences(INDEX + "_" + namespace, Context.MODE_PRIVATE);
+    }
+
+    // ---------------------------------------------------- encrypted store
+
+    @Override
+    public void encryptToPref(String key, String value) throws Exception {
+        byte[] ct = crypto(true, value.getBytes(StandardCharsets.UTF_8));
+        prefs.edit().putString(key, android.util.Base64.encodeToString(ct, android.util.Base64.NO_WRAP)).apply();
+        Set<String> keys = new HashSet<>(index.getStringSet("keys", Collections.<String>emptySet()));
+        keys.add(key);
+        index.edit().putStringSet("keys", keys).apply();
+    }
+
+    @Override
+    public String decryptFromPref(String key) throws Exception {
+        String b64 = prefs.getString(key, null);
+        if (b64 == null) return "";
+        return new String(crypto(false, android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)),
+            StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public String getStateStoreKeysJSON() {
+        JSONArray arr = new JSONArray();
+        for (String k : index.getStringSet("keys", Collections.<String>emptySet())) {
+            arr.put(k.startsWith("statestore-") ? k.substring("statestore-".length()) : k);
+        }
+        return arr.toString();
+    }
+
+    // ------------------------------------------------------ device facts
+
+    @Override
+    public void log(String tag, String line) {
+        // Whitelist only stage labels. Never forward native lines, identity or URLs.
+        String text = (line == null ? "" : line).toLowerCase(java.util.Locale.ROOT);
+        String stage = text.contains("timeout") || text.contains("timed out") ? "control-timeout"
+            : text.contains("certificate") || text.contains("x509") ? "certificate-error"
+            : text.contains("no such host") ? "dns-error"
+            : text.contains("connection refused") ? "connection-refused"
+            : text.contains("control:") && text.contains("error") ? "control-error" : "";
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (!stage.isEmpty() && (!stage.equals(lastStage) || now-lastStageAt > 15000)) {
+            lastStage=stage; lastStageAt=now;
+            com.dsh.mobile.core.RunLog.INSTANCE.warn("VPN", "native stage="+stage);
+        }
+    }
+
+    @Override
+    public String getOSVersion() {
+        return Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE;
+    }
+
+    @Override
+    public long getSDKInt() {
+        return Build.VERSION.SDK_INT;
+    }
+
+    @Override
+    public String getDeviceName() {
+        try {
+            String n = Settings.Global.getString(ctx.getContentResolver(), "device_name");
+            if (n != null && !n.isEmpty()) return n;
+        } catch (Exception ignored) {}
+        return Build.MODEL == null ? "Android" : Build.MODEL;
+    }
+
+    @Override
+    public String getInstallSource() {
+        try {
+            String s = ctx.getPackageManager().getInstallerPackageName(ctx.getPackageName());
+            return s == null ? "sideload" : s;
+        } catch (Exception e) {
+            return "sideload";
+        }
+    }
+
+    @Override
+    public boolean shouldUseGoogleDNSFallback() {
+        return true;
+    }
+
+    @Override
+    public boolean isChromeOS() {
+        return false;
+    }
+
+    @Override
+    public boolean isClientLoggingEnabled() {
+        return false;
+    }
+
+    @Override
+    public String getInterfacesAsJson() {
+        StringBuilder sb = new StringBuilder("[");
+        try {
+            Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces();
+            boolean firstIface = true;
+            for (NetworkInterface ni : Collections.list(en)) {
+                if (!firstIface) sb.append(',');
+                firstIface = false;
+                sb.append("{\"name\":\"").append(ni.getName())
+                    .append("\",\"index\":").append(ni.getIndex())
+                    .append(",\"mtu\":").append(ni.getMTU() > 0 ? ni.getMTU() : 1500)
+                    .append(",\"up\":").append(ni.isUp())
+                    .append(",\"broadcast\":").append(!ni.isLoopback() && !ni.isPointToPoint())
+                    .append(",\"loopback\":").append(ni.isLoopback())
+                    .append(",\"pointToPoint\":").append(ni.isPointToPoint())
+                    .append(",\"multicast\":").append(ni.supportsMulticast())
+                    .append(",\"addrs\":[");
+                boolean firstAddr = true;
+                for (java.net.InterfaceAddress ia : ni.getInterfaceAddresses()) {
+                    if (!firstAddr) sb.append(',');
+                    firstAddr = false;
+                    String ip = ia.getAddress().getHostAddress();
+                    int pct = ip.indexOf('%');
+                    if (pct > 0) ip = ip.substring(0, pct);
+                    sb.append("{\"ip\":\"").append(ip)
+                        .append("\",\"prefixLen\":").append(ia.getNetworkPrefixLength())
+                        .append('}');
+                }
+                sb.append("]}");
+            }
+        } catch (Exception ignored) {}
+        sb.append(']');
+        return sb.toString();
+    }
+
+    @Override
+    public String getPlatformDNSConfig() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network network = physicalNetwork(cm);
+            android.net.LinkProperties lp = network == null ? null : cm.getLinkProperties(network);
+            if (lp == null) return "";
+            StringBuilder dns = new StringBuilder();
+            for (java.net.InetAddress address : lp.getDnsServers()) {
+                if (dns.length() > 0) dns.append(' ');
+                dns.append(address.getHostAddress());
+            }
+            return dns + "\n" + (lp.getDomains() == null ? "" : lp.getDomains());
+        } catch (Exception e) { return ""; }
+    }
+
+    static Network physicalNetwork(ConnectivityManager cm) {
+        Network best = null;
+        int bestScore = -1;
+        Network active = cm.getActiveNetwork();
+        for (Network network : cm.getAllNetworks()) {
+            NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+            if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue;
+            int score = (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) ? 100 : 0)
+                + (network.equals(active) ? 20 : 0)
+                + (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ? 10 : 0);
+            if (score > bestScore) { best = network; bestScore = score; }
+        }
+        return best;
+    }
+
+    @Override
+    public boolean bindSocketToNetwork(int fd) {
+        try {
+            ConnectivityManager cm =
+                (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+            Network best = physicalNetwork(cm);
+            if (best == null) return false;
+            FileDescriptor fdObj = new FileDescriptor();
+            Field f = FileDescriptor.class.getDeclaredField("descriptor");
+            f.setAccessible(true);
+            f.setInt(fdObj, fd);
+            best.bindSocket(fdObj);
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "bindSocketToNetwork: " + e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    // -------------------------------------------------- MDM / syspolicy
+
+    @Override
+    public boolean getSyspolicyBooleanValue(String key) {
+        return false;
+    }
+
+    @Override
+    public String getSyspolicyStringValue(String key) {
+        return "";
+    }
+
+    @Override
+    public String getSyspolicyStringArrayJSONValue(String key) {
+        return "[]";
+    }
+
+    @Override
+    public byte[] getUserCACertsPEM() {
+        return new byte[0];
+    }
+
+    // ----------------------------------------------- hardware attestation
+
+    @Override
+    public boolean hardwareAttestationKeySupported() {
+        return false;
+    }
+
+    @Override
+    public String hardwareAttestationKeyCreate() throws Exception {
+        throw new Exception("hardware attestation not supported");
+    }
+
+    @Override
+    public void hardwareAttestationKeyLoad(String id) throws Exception {
+        throw new Exception("hardware attestation not supported");
+    }
+
+    @Override
+    public byte[] hardwareAttestationKeyPublic(String id) throws Exception {
+        throw new Exception("hardware attestation not supported");
+    }
+
+    @Override
+    public void hardwareAttestationKeyRelease(String id) {}
+
+    @Override
+    public byte[] hardwareAttestationKeySign(String id, byte[] blob) throws Exception {
+        throw new Exception("hardware attestation not supported");
+    }
+
+    // -------------------------------------------------------- crypto
+
+    private SecretKey getOrCreateKey() throws Exception {
+        KeyStoreHolder.ensure();
+        java.security.KeyStore ks = java.security.KeyStore.getInstance(ANDROID_KEYSTORE);
+        ks.load(null);
+        if (ks.containsAlias(KEY_ALIAS)) {
+            return (SecretKey) ks.getKey(KEY_ALIAS, null);
+        }
+        KeyGenerator kg = KeyGenerator.getInstance("AES", ANDROID_KEYSTORE);
+        kg.init(new KeyGenParameterSpec.Builder(KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .build());
+        return kg.generateKey();
+    }
+
+    private byte[] crypto(boolean encrypt, byte[] data) throws Exception {
+        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+        if (encrypt) {
+            c.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
+            byte[] iv = c.getIV();
+            byte[] ct = c.doFinal(data);
+            byte[] out = new byte[iv.length + ct.length];
+            System.arraycopy(iv, 0, out, 0, iv.length);
+            System.arraycopy(ct, 0, out, iv.length, ct.length);
+            return out;
+        }
+        byte[] iv = new byte[12];
+        System.arraycopy(data, 0, iv, 0, 12);
+        c.init(Cipher.DECRYPT_MODE, getOrCreateKey(), new GCMParameterSpec(128, iv));
+        return c.doFinal(data, 12, data.length - 12);
+    }
+
+    static final class KeyStoreHolder {
+        static void ensure() {}
+    }
+}

@@ -1,0 +1,92 @@
+# 第三方组件与字体授权
+
+本项目的源代码以 [Apache-2.0](./LICENSE) 授权。它依赖或内嵌的第三方组件各有自己的授权，
+本文件统一声明。
+
+## 内嵌图像素材
+
+### 鲸鱼娘 Q 版形象（应用图标与悬浮助手）
+
+- **文件**：`app/src/main/res/mipmap-*/ic_launcher*.png`、
+  `app/src/main/res/drawable-*/ic_launcher_fg.png`、`app/src/main/res/drawable-*/ic_notification.png`、
+  `app/src/main/res/drawable-nodpi/whale_companion.png`、`whale_companion_peek.png`
+- **生成方式**：图标由 `tools/make_icons.py` 从同一张原图按 Android 各密度切出；悬浮助手直接使用 `art/improved-1.png`，未重绘角色；贴壁探头图由该原图经 AI 辅助调整姿势，沿用角色署名与 CC BY-NC-SA 4.0 素材协议
+- **素材来源**：[fornarwhal/deepseek-whale-girl-icon](https://github.com/fornarwhal/deepseek-whale-girl-icon)
+- **授权**：**CC BY-NC-SA 4.0**（署名 — 非商业性使用 — 相同方式共享）
+- **署名**：
+  - 角色形象来源：上善无形（原创 OC「溟月」）
+  - DeepSeek 元素二创：ZipZipPipe
+  - 图标修复版：QYQCAMIAO
+- **对本项目的约束**：使用该素材的部分**不得用于商业用途**；如果再分发，
+  须保留本署名并以相同协议共享该素材。应用代码本身仍为 Apache-2.0，
+  两者互不影响。
+
+## 内嵌字体
+
+### MiSans（小米兰亭之后的 HyperOS 默认字体）
+
+- **文件**：`app/src/main/res/font/misans_regular.ttf`、`misans_medium.ttf`、`misans_semibold.ttf`
+- **版权**：小米科技有限责任公司（Xiaomi Inc.）
+- **授权**：MiSans 全球免费商用，允许在软件中嵌入使用。
+- **授权要求（已履行）**：小米的条款要求「在软件中特别注明使用了 MiSans 字体」，
+  这一注明即在本文件、[README](./README.md#致谢) 与 App 内关于页的第三方说明中给出。
+- **来源**：<https://hyperos.mi.com/font>
+- **修改说明**：原始 TTF 已用 `tools/subset_fonts.py` 做字形子集化（保留 GB2312 全字集 +
+  ASCII + 本项目界面文案用到的字符）。子集化属于对文件内含字符集的裁剪，不改变字形外观，
+  符合小米「可自由调节粗细、间距，但不得单独更改字体外观」的要求。
+  未做任何字形轮廓修改。
+
+> 本项目与小米公司无隶属关系；使用 MiSans 不代表小米对本项目的认可。
+
+## 运行时依赖
+
+| 组件 | 授权 | 用途 |
+|---|---|---|
+| [Miuix](https://github.com/compose-miuix-ui/miuix) (`top.yukonga.miuix.kmp`) | Apache-2.0 | HyperOS 设计语言的 Compose 实现 |
+| [Jetpack Compose](https://developer.android.com/jetpack/compose) | Apache-2.0 | UI 框架 |
+| [AndroidX](https://developer.android.com/jetpack/androidx) | Apache-2.0 | 平台兼容库 |
+| [Kotlin / kotlinx.serialization](https://kotlinlang.org) | Apache-2.0 | 语言与 JSON |
+| [OkHttp](https://square.github.io/okhttp/) | Apache-2.0 | HTTP 探测、资源缓存与实时连接 |
+
+## 互操作对象（非本仓库代码）
+
+| 项目 | 授权 | 关系 |
+|---|---|---|
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | 见其仓库 | 本 App 通过其官方 API 与事件流工作，不包含其代码 |
+| [Miuix](https://github.com/compose-miuix-ui/miuix) | Apache-2.0 | 见上 |
+
+## 随仓库分发的第三方代码
+
+| 项目 | 授权 | 位置 | 关系 |
+|---|---|---|---|
+| [@linxin666/dsh-remote-web-ui](https://www.npmjs.com/package/@linxin666/dsh-remote-web-ui) 0.4.14 | **Apache-2.0** | `third_party/dsh-remote-web-ui/` | **本仓库包含其完整代码**（见下） |
+| [Tailscale](https://tailscale.com/) / [libtailscale](https://github.com/tailscale/libtailscale) | BSD-3-Clause / MIT | `third_party/tailscale-bindings/` | 内嵌原生库，见该目录 LICENSE 文件 |
+
+### 关于 `@linxin666/dsh-remote-web-ui`
+
+本仓库**包含**该插件 0.4.14 的完整副本，用于：
+
+1. 让用户从本地安装，不依赖可能随时消失的 npm 包
+2. 携带一处 IPv6 网络修复补丁（见该目录 `README-DSH-PAL.md`）
+
+**合规声明（Apache-2.0 要求）：**
+
+- **保留许可证**：完整 `LICENSE` 随副本分发，见 `third_party/dsh-remote-web-ui/LICENSE`
+- **声明修改**：本副本相对 npm 官方版**增加了一处 IPv6 黑洞修复补丁**，标记为
+  `// [dsh-fix-ipv6-blackhole] begin/end`，说明见同目录 `README-DSH-PAL.md`
+- **非官方发布**：本副本是第三方再分发，**非原作者发布**，原作者不对本 App 背书
+- **上游仓库**：<https://github.com/ShiroEirin/dsh-web-ui>
+- **上游状态**：该包已被作者标记弃用，浏览器远控能力不再维护
+
+本项目与原作者无隶属关系。
+
+## 通知与媒体岛
+
+本项目使用 Android 标准任务通知与 MediaStyle / MediaSession 媒体通道。
+小米系统按机型和版本决定媒体岛呈现；不使用私有焦点通知身份认证绕过，不需要 root 或系统修改。
+
+## 其他内嵌组件
+
+- DSHgo 参考实现：MIT，完整文本见 third_party/DSHgo-MIT-LICENSE。
+- Tailscale 内核与 Go：BSD，完整文本见 third_party/tailscale-bindings/LICENSE-TAILSCALE 和 LICENSE-GO。
+- WireGuard Android tunnel：Apache-2.0，来源 https://git.zx2c4.com/wireguard-android。

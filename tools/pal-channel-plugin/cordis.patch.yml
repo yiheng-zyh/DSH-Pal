@@ -1,0 +1,9 @@
+# Mount the DSH Pal public-entry channel switcher.
+#
+# Kept as a separate package on purpose: it only *edits the config* of
+# `remote-web-ui`, it never imports or patches that plugin's code. That way an
+# upstream update of the remote-control plugin cannot overwrite this feature,
+# and this plugin can be removed without touching pairings or devices.
+- insert:
+    - id: pal-channel
+      name: 'dsh-pal-channel'

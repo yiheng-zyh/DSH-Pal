@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Status-bar content for the HyperOS focus notification (miui.focus.rvBar).
+
+  This is what the ROM actually inflates for the island; the JSON payload alone
+  is not enough — without a RemoteViews the system logs
+  `getFocusNotificationContent ... value:{}` and never renders the island.
+
+  Constraints come from the timer notification that Xiaomi's own clock app
+  publishes: a single short line of text plus one leading icon, sized for the
+  collapsed capsule. Keep it minimal and single-row; anything taller is clipped.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="12dp"
+    android:id="@+id/dsh_bar_root">
+
+    <ImageView
+        android:id="@+id/dsh_bar_icon"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginEnd="6dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_notification"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/dsh_bar_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFFFF"
+        android:text="" />
+
+</LinearLayout>

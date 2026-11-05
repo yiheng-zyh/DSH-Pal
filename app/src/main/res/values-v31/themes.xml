@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Launch theme for Android 12+ (API 31).
+
+      The platform draws a splash screen from the launcher icon for every
+      Activity, and HyperOS additionally stamps the app label beneath it. Both
+      landed on top of the in-app BootScreen, which is why a doubled "DSH"
+      watermark appeared over our mark.
+
+      The system icon cannot be omitted outright, so the splash is made to read
+      as one plain dark frame: same background colour as the boot layer, and a
+      fully transparent icon. BootScreen then takes over with no visible seam.
+    -->
+    <style name="Theme.DshMobile.Launch" parent="Theme.DshMobile">
+        <item name="android:windowSplashScreenBackground">@color/dsh_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/dsh_bg</item>
+    </style>
+</resources>

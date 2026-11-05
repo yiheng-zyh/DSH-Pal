@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dark-mode variant of the status-bar content (miui.focus.rvBarNight).
+
+  Same layout, light text: the capsule sits on a dark background in dark mode.
+  Kept as a separate file because RemoteViews takes a layout resource, not a
+  themed view — the ROM inflates whichever key matches the current mode.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="12dp"
+    android:id="@+id/dsh_bar_root">
+
+    <ImageView
+        android:id="@+id/dsh_bar_icon"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginEnd="6dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_notification"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/dsh_bar_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="#FFE8E8E8"
+        android:text="" />
+
+</LinearLayout>

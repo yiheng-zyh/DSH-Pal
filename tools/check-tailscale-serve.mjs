@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {planServeChange,restoredPort} from '../pc-plugin/index.mjs';
+import {createHash} from 'node:crypto';
+const origin='https://desktop.example.ts.net';
+const config=proxy=>({Web:{'desktop.example.ts.net:443':{Handlers:{'/':{Proxy:proxy}}}}});
+assert.equal(planServeChange(config('http://127.0.0.1:1234'),origin,1234,1234),'unchanged');
+assert.equal(planServeChange(config('http://127.0.0.1:1234'),origin,5678,1234),'update');
+assert.equal(planServeChange(config('http://127.0.0.1:9999'),origin,5678,1234),'conflict');
+assert.equal(planServeChange({Web:{'other.example.ts.net:443':{}}},origin,5678,1234),'conflict');
+assert.equal(planServeChange({Web:{'desktop.example.ts.net:443':{Handlers:{'/':{Text:'another app'}}}}},origin,5678,1234),'conflict');
+assert.equal(planServeChange({},origin,5678,1234),'update');
+assert.equal(planServeChange({TCP:{'443':{TCPForward:'127.0.0.1:9000'}}},origin,5678,1234),'conflict');
+assert.equal(planServeChange({AllowFunnel:{'desktop.example.ts.net:443':true}},origin,5678,1234),'conflict');
+const record={version:1,originHash:createHash('sha256').update(origin).digest('hex'),port:5678};
+assert.equal(planServeChange(config('http://127.0.0.1:5678'),origin,9000,restoredPort(record,origin,1234)),'update');
+assert.equal(restoredPort(record,'https://another.example.ts.net',1234),1234);
+assert.equal(restoredPort({...record,port:-1},origin,1234),1234);
+console.log('PASS 11 Serve ownership checks: restart recovery, idempotency and refusal to overwrite unrelated routes');

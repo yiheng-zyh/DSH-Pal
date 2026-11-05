@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="dsh_bg">#FF15161A</color>
+    <color name="dsh_surface">#FF1E2025</color>
+    <color name="dsh_accent">#FF4C8DFF</color>
+    <color name="ic_launcher_background">#FF15161A</color>
+</resources>

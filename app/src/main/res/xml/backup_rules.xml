@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?><full-backup-content>
+<exclude domain="file" path="tailscale/" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_tailscale.xml" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_index_tailscale.xml" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_secrets_wireguard.xml" />
+<exclude domain="sharedpref" path="dsh_mobile_vpn_index_wireguard.xml" />
+<exclude domain="sharedpref" path="dsh_overlay_draft.xml" />
+<!-- 实验功能「对话本地缓存」：对话正文（含工具输出）属敏感内容，绝不进云备份或设备迁移。 -->
+<exclude domain="file" path="chat-archive/" />
+</full-backup-content>

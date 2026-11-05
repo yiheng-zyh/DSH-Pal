@@ -1,0 +1,59 @@
+name: 故障反馈
+description: 提交可复现的问题，帮助定位连接、布局、通知或系统兼容故障。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请勿上传配对链接中的 token、Cookie、授权链接、WireGuard 私钥、私人会话、真实域名/IP 或设备序列号。日志导出后仍需检查脱敏。
+  - type: input
+    id: version
+    attributes:
+      label: App 版本 / 提交号
+      placeholder: 关于页版本；能提供提交号时一并填写
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 设备与运行环境
+      description: 手机/平板型号、Android/ROM、WebView版本、横竖屏/分屏、DSH与相关插件版本；不要填序列号。
+    validations:
+      required: true
+  - type: dropdown
+    id: route
+    attributes:
+      label: 发生问题时使用的连接
+      options:
+        - Relay
+        - Cloudflare Tunnel
+        - Tailscale
+        - WireGuard
+        - 自有 HTTPS / frp
+        - Wi-Fi 直连
+        - USB 开发通道
+        - 未配置 / 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从打开 App 开始写；如切过连接，写明“从哪条切到哪条”。也请说明是回桌面还是划掉后台。
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 期望与实际表现
+      description: 页面是否能用、消息是否能加载；不要仅凭“已连接”或一个百分比判断。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏日志 / 截图 / 录屏
+      description: 设置中可导出诊断；涉及布局请保留相关插件名称，遮住私人内容。复现期间是否有正在运行的任务也请说明。

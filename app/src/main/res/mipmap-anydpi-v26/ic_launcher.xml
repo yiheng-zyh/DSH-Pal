@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive launcher icon.
+
+  The foreground is the whale-girl artwork (Q-version mascot), rasterised per
+  density into drawable-*/ic_launcher_fg.png by tools/make_icons.py. It is scaled
+  to the central 62% so the ears, tail and hat survive the launcher masks.
+
+  `monochrome` lets HyperOS theme the icon from the notification silhouette on
+  Android 13+ instead of showing a coloured square.
+
+  Artwork: CC BY-NC-SA 4.0, see THIRD_PARTY_LICENSES.md.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_fg" />
+    <monochrome android:drawable="@drawable/ic_notification" />
+</adaptive-icon>

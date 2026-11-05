@@ -1,0 +1,8 @@
+{
+  "name": "dsh-mobile-tailscale-serve",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.mjs",
+  "license": "Apache-2.0",
+  "description": "Keeps Tailscale Serve attached to the current DSH loopback port; reuses remote-web-ui pairing."
+}

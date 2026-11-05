@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../app/src/main/java/com/dsh/mobile/bridge/BridgeScript.kt',import.meta.url),'utf8');
+const method=source.match(/window\.__DSH_MOBILE_RECONNECT__ = function\(\)\{([\s\S]*?)\n  \};/);
+assert.ok(method,'recovery entry exists');
+let online=0,closed=0;
+const sockets=new Set([0,1,2,3].map(readyState=>({readyState,close(){closed++}})));
+const context={taskSockets:sockets,window:{dispatchEvent(e){assert.equal(e.type,'online');online++}},Event:class{constructor(type){this.type=type}}};
+vm.createContext(context);vm.runInContext('window.reconnect=function(){'+method[1]+'}',context);
+for(let i=0;i<8;i++)context.window.reconnect();
+assert.equal(online,8);assert.equal(closed,0,'native recovery must preserve connecting and open sockets');
+console.log('PASS repeated native nudges preserve pending/live page-owned sockets');

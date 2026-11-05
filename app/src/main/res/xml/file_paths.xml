@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paths exposed through the FileProvider used to share the run log.
+
+  Existing log sharing uses private external files. Verified update APKs use
+  only the dedicated app-updates cache subdirectory, with temporary read grants.
+-->
+<paths>
+    <cache-path name="app_update" path="app-updates/" />
+    <external-files-path
+        name="run_log"
+        path="." />
+</paths>

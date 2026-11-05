@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DSH Pal</string>
+    <string name="island_channel_name">任务进度</string>
+    <string name="island_channel_desc">在灵动岛与通知栏实时显示 DSH 任务执行进度</string>
+</resources>
