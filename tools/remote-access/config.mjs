@@ -35,9 +35,48 @@ export function direct(value,name='direct'){
   if(!out.ipv6&&!out.lan)throw Error(`${name}: enable at least one of ipv6/lan when enabled`);
   return out;
 }
+/**
+ * 用户自己的 HTTPS 入口（可选）。
+ *
+ * 用途：用户已经有现成的 HTTPS 域名 —— 自己的 nginx / caddy 反代、Cloudflare Named
+ * 隧道、或者公司给的反向代理 —— 不想走 Sakura frp，就填这里。
+ *
+ * 为什么单独一个字段而不是复用 publicOrigin：
+ * publicOrigin 是「本工具自己那条隧道发布的地址」，切换 provider / 重配隧道会重写它。
+ * 把用户的自定义域名放进同一个字段，一次重配就会被冲掉。分成两个字段后，
+ * `customOrigin` 只要非空就优先作为对外发布地址（见 publishedOrigin），
+ * 两个来源互不覆盖。
+ */
+export function customOrigin(value, name = 'customOrigin') {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') throw Error(`${name} must be a string`);
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw Error(`${name} must be an HTTPS origin like https://your.domain`);
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash)
+    throw Error(`${name} must contain only https://host[:port]`);
+  if (url.hostname === 'localhost' || url.hostname.endsWith('.localhost') || net.isIP(url.hostname))
+    throw Error(`${name} must use a hostname covered by a trusted TLS certificate`);
+  return url.origin;
+}
+
+/**
+ * 当前对外发布的入口：自定义优先，其次是自己那条隧道的 publicOrigin。
+ * 网关、trustedHosts、配对二维码必须都用这一个口径，否则会出现
+ * 「二维码给的是 A、Host 白名单放的是 B」这种连不上的组合。
+ */
+export function publishedOrigin(config) {
+  return config?.customOrigin || config?.publicOrigin;
+}
+
 export function validateConfig(raw){
   if(!raw||raw.version!==1)throw Error('Expected remote-access configuration version 1');
   const value={version:1,publicOrigin:origin(raw.publicOrigin),gatewayPort:port(raw.gatewayPort??18772,'gatewayPort')};
+  const custom = customOrigin(raw.customOrigin);
+  if (custom !== undefined) value.customOrigin = custom;
   if(raw.dshPort!==undefined)value.dshPort=port(raw.dshPort,'dshPort');
   if(value.dshPort===value.gatewayPort)throw Error('Gateway and DSH ports must differ');
   if(!['sakura','external'].includes(raw.provider))throw Error('provider must be sakura or external');

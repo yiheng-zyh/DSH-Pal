@@ -36,6 +36,7 @@ autoTunnel=true  + publicBaseUrl=""                → 走插件自带的 Cloudf
 | 开关直连入口 | `POST /api/pal-channel/direct` | 写 remote-access 配置，网关 5 秒热生效 |
 | 检查插件更新 | `GET /api/pal-channel/update` | 版本对比 + 更新公告（读仓库里的 `CHANGELOG.md`） |
 | 应用更新 | `POST /api/pal-channel/update/apply` | 整仓 `git pull --ff-only`；有未提交改动就拒绝 |
+| 自定义 HTTPS 入口 | `POST /api/pal-channel/custom-origin` | 写 `customOrigin` 并同步 trustedHosts；只收 https 域名 |
 
 ### 连接通道总览（2026-11-06 新增）
 
@@ -110,10 +111,33 @@ IPv6 端口探测 API。而「设备自己连过」这条证据对所有用户�
 | IPv6 直连 | 两端确认 IPv6 → `configure-direct.mjs --ipv6` → 路由器放行 → `show-pair --via ipv6` → 不用时 `--off` |
 | Wi-Fi 直连 | 同一 Wi-Fi → `configure-direct.mjs --lan` → `show-pair --via lan` |
 | 组网通道 | 电脑装 Tailscale 登录 / WireGuard 要服务端 + 手机登录同一账号 |
+| 自定义 HTTPS 链接 | 域名 + 受信证书 → nginx/caddy 反代（附 caddy 两行配置）→ 透传 Host 头 → 保存后自动登记 trustedHosts |
 
 展开区末尾有「打开完整文档 ↗」指向仓库里的 `docs/connections.md`。
 **「配置说明」和「怎么办」是两个按钮、两种用途**：前者是正向安装流程（正常状态下也能看），
 后者是故障排查（只在异常时出现）。混在一起会让刚上手的用户先看到一堆报错排查，反而更懵。
+
+### 自定义 HTTPS 链接：用户自己的域名（2026-11-06 新增）
+
+用户已经有现成 HTTPS 域名时（自己的 nginx/caddy 反代、Cloudflare Named 隧道、公司/学校的
+HTTPS 转发地址），不必走 Sakura frp —— 面板里直接填，填完就用他给的地址。
+
+**实现要点**：
+
+- 写进 `config.json` 的 **`customOrigin`** 字段，**不动 `publicOrigin`**。
+  两个字段各管一头：`publicOrigin` 是「本工具自己那条隧道发布的地址」（重配 provider 会重写），
+  `customOrigin` 是用户自己的。合成一个字段的话，一次重配就会把用户域名冲掉。
+- 生效口径统一走 `publishedOrigin()`：**customOrigin 非空就优先**。网关的 Host 白名单、
+  TLS 探测、trustedHosts、二维码全部用这个口径，避免「二维码给 A、白名单放 B」。
+- **保存时同步写插件 trustedHosts**：插件的动态信任只认私有地址、不认公网域名，
+  不登记就无法完成首次配对。写失败不会让整次保存假装失败，而是如实返回 `trustedError` 并说明补救办法。
+- **只收 https + 受信证书域名**：`http://`、IP 字面量、`localhost` 一律拒绝（返回 400 且不落盘）
+  —— 明文入口走 IPv6/LAN 通道，自签证书 App 根本不信任。
+- 清除 = 删掉 `customOrigin`，自动回到 `publicOrigin`。
+
+面板里这条通道带一个输入框 + 保存/清除按钮，还有独立的「配置说明」（6 步，含反代要透传
+Host 头的提醒 —— 改写 Host 会被插件白名单挡成 403，和 DSH 本体不能套反代是同一类问题）。
+它**不参与隧道切换**（不是插件提供的通道），只是换了对外发布地址。
 
 ### 国内 frp 的签到提醒（2026-11-06 新增）
 

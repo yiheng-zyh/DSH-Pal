@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {validateConfig} from './config.mjs';
+import {validateConfig,publishedOrigin} from './config.mjs';
 import {dataDirectory,loadSakuraToken} from './windows.mjs';
 import {findDshPort} from './discovery.mjs';
 import {createGateway} from './gateway.mjs';
@@ -45,7 +45,8 @@ if(config.provider==='sakura'){
 // 任何提前求值都会撞上 TDZ（ReferenceError），表现为"进程在跑但端口没监听"。
 // 用 let 声明 + 延迟到实际调用时才读 gateway，是安全的。
 let gatewayRef=null;
-const gateway=createGateway({publicOrigin:config.publicOrigin,getTargetPort:()=>targetPort,
+const published=publishedOrigin(config);
+const gateway=createGateway({publicOrigin:published,getTargetPort:()=>targetPort,
   getDirectEntries:()=>(gatewayRef?gatewayRef.liveDirectEntries():[]).filter(entry=>entry.listening),
   // 把隧道客户端的真实状态交给网关，用于 /api/pair/status 的诊断注入。
   // 用户在 App 里就能看到「隧道被拒绝 + 原因」，不必再靠命令行排查。
@@ -117,7 +118,7 @@ function startClient(){
 function probePublicOrigin(){
   let host, port;
   try{
-    const url=new URL(config.publicOrigin);
+    const url=new URL(published);
     host=url.hostname;
     port=Number(url.port||443);
   }catch{ return Promise.resolve({ok:false,detail:'入口地址无效'}); }
@@ -190,7 +191,7 @@ async function update(){
   // 节流：仅当直连 origin 集合变化或超过 60s 才写，避免每 5s 重写配置文件。
   const directKey=directOrigins.join(',');
   if(config.dshConfigPath&&(directKey!==lastTrustKey||Date.now()-lastTrustCheck>60000)){
-    try{await applyTrustedHost(config.dshConfigPath,config.publicOrigin,{extraOrigins:directOrigins});
+    try{await applyTrustedHost(config.dshConfigPath,published,{extraOrigins:directOrigins});
       lastTrustKey=directKey;lastTrustCheck=Date.now();}catch{}
   }
   targetPort=await findDshPort({preferred:targetPort??preferredPort});
@@ -198,7 +199,7 @@ async function update(){
   // Do not publish an external tunnel while initial DSH discovery is pending.
   if(targetPort!==null&&!child&&Date.now()>=restartAt)startClient();
   const value={updatedAt:new Date().toISOString(),pid:process.pid,targetAvailable:targetPort!==null,
-    targetPort,clientState,clientReason,publicOrigin:config.publicOrigin,businessVerified:false,...gateway.snapshot(),
+    targetPort,clientState,clientReason,publicOrigin:published,customOrigin:config.customOrigin??null,businessVerified:false,...gateway.snapshot(),
     direct:directStates};
   const temporary=path.join(directory,`state-${process.pid}.tmp`);
   await fs.writeFile(temporary,JSON.stringify(value,null,2));await fs.rename(temporary,path.join(directory,'state.json'));

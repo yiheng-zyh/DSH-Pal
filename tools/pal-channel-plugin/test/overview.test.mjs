@@ -18,6 +18,7 @@ import {
 } from '../lib/overview.js';
 import { compareVersions, checkUpdate, parseChangelog } from '../lib/update.js';
 import { applyUpdate } from '../lib/update-service.js';
+import { readCustomOrigin, setCustomOrigin } from '../lib/custom-origin-service.js';
 import { setDirect } from '../lib/direct-service.js';
 
 /** 造一个 os.networkInterfaces() 形状的假表。 */
@@ -79,13 +80,18 @@ test('通道清单：隧道在前、直连居中、组网如实反映电脑侧�
       wireguard: { installed: false, serving: false },
     },
   });
-  assert.deepEqual(overview.channels.map((c) => c.id), ['domestic', 'cloudflare', 'ipv6', 'lan', 'mesh']);
+  // 顺序：两条隧道 → 两条直连 → 自定义 HTTPS → 组网。
+  // 自定义排在直连之后是有意的：它和隧道同类（公网域名），但属于「可选补充」，
+  // 放在常用通道之后，不让它插在直连与组网中间打断阅读。
+  assert.deepEqual(overview.channels.map((c) => c.id), ['domestic', 'cloudflare', 'ipv6', 'lan', 'custom', 'mesh']);
+  assert.equal(overview.channels[4].phase, 'off', '没填自定义域名时是 off');
+  assert.equal(overview.channels[4].editable, true, '自定义入口可编辑');
   assert.equal(overview.channels[0].phase, 'current');
   assert.equal(overview.channels[2].phase, 'unknown', '本机监听但无外部证据时不能绿');
   assert.equal(overview.channels[2].external, 'unknown');
   assert.equal(overview.channels[3].phase, 'off');
-  assert.equal(overview.channels[4].phase, 'ready');
-  assert.match(overview.channels[4].detail, /me@github/, '组网通道要显示登录账号');
+  assert.equal(overview.channels[5].phase, 'ready');
+  assert.match(overview.channels[5].detail, /me@github/, '组网通道要显示登录账号');
 });
 
 test('直连通道：收到过外部请求才算外部已验证（绿色）', () => {
@@ -368,6 +374,45 @@ test('更新公告：解析 CHANGELOG 里目标版本的段落，找不到就退
   assert.deepEqual(parseChangelog(markdown, '0.2.0'), ['【新增】', '· 新功能 A']);
   assert.deepEqual(parseChangelog(markdown, '9.9.9'), ['【新增】', '· 新功能 A'], '未知版本退回最新段落');
   assert.deepEqual(parseChangelog('', '0.1.0'), []);
+});
+
+test('自定义 HTTPS 入口：填了自己的域名就用它，清除后回到 publicOrigin', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'pal-custom-'));
+  await fs.writeFile(
+    path.join(directory, 'config.json'),
+    JSON.stringify({ version: 1, publicOrigin: 'https://sakura.example:12451', gatewayPort: 18772, provider: 'external' }),
+  );
+
+  const saved = await setCustomOrigin({ origin: 'https://ds.example.com' }, { directory });
+  assert.equal(saved.status, 200);
+  const written = JSON.parse(await fs.readFile(path.join(directory, 'config.json'), 'utf8'));
+  assert.equal(written.customOrigin, 'https://ds.example.com');
+  assert.equal(written.publicOrigin, 'https://sakura.example:12451', '不能覆盖 Sakura 那条地址');
+
+  const read = await readCustomOrigin({ directory });
+  assert.equal(read.effectiveOrigin, 'https://ds.example.com', '自定义优先作为发布地址');
+
+  // 清除：回到 publicOrigin。
+  const cleared = await setCustomOrigin({ origin: null }, { directory });
+  assert.equal(cleared.status, 200);
+  const after = JSON.parse(await fs.readFile(path.join(directory, 'config.json'), 'utf8'));
+  assert.equal('customOrigin' in after, false);
+  const readAfter = await readCustomOrigin({ directory });
+  assert.equal(readAfter.effectiveOrigin, 'https://sakura.example:12451');
+});
+
+test('自定义 HTTPS 入口：拒绝 http、IP 与自签证书类地址', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'pal-custom-'));
+  await fs.writeFile(
+    path.join(directory, 'config.json'),
+    JSON.stringify({ version: 1, publicOrigin: 'https://a.example', gatewayPort: 18772, provider: 'external' }),
+  );
+  for (const bad of ['http://ds.example.com', 'https://192.168.1.10', 'https://localhost', 'not-a-url']) {
+    const result = await setCustomOrigin({ origin: bad }, { directory });
+    assert.equal(result.status, 400, `${bad} 应被拒绝`);
+  }
+  const untouched = JSON.parse(await fs.readFile(path.join(directory, 'config.json'), 'utf8'));
+  assert.equal('customOrigin' in untouched, false, '校验失败不能留下半个字段');
 });
 
 test('应用更新：工作区干净时执行 git pull --ff-only 并如实报变化', async () => {

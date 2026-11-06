@@ -37,6 +37,7 @@ import {
   buildChannelOverview, collectDirect, collectMesh, globalIpv6Addresses,
 } from './overview.js';
 import { setDirect } from './direct-service.js';
+import { readCustomOrigin, setCustomOrigin } from './custom-origin-service.js';
 import { checkUpdate, localVersion } from './update.js';
 import { applyUpdate } from './update-service.js';
 
@@ -67,6 +68,8 @@ export const CLIENT_LOG_PATH = '/api/pal-channel/client-log';
 export const OVERVIEW_PATH = '/api/pal-channel/overview';
 /** 直连入口开关（写）。语义与 configure-direct.mjs 一致：请求体是完整期望集合。 */
 export const DIRECT_PATH = '/api/pal-channel/direct';
+/** 自定义 HTTPS 入口（读写）。用户有自己的域名/反代时走这条，不依赖 Sakura。 */
+export const CUSTOM_ORIGIN_PATH = '/api/pal-channel/custom-origin';
 /** 插件更新检查（只读，不下载不覆盖）。 */
 export const UPDATE_PATH = '/api/pal-channel/update';
 /** 应用更新（写）：git pull --ff-only。与检查分开，避免"打开面板就在改东西"。 */
@@ -407,11 +410,14 @@ function applyUnsafe(ctx, config = {}) {
         // 组网探测要跑两条命令（tailscale status / sc query），60 秒缓存足够：
         // 用户不会一分钟内反复登录/退出 Tailscale，但面板每 20 秒就轮询一次。
         const meshSnapshot = await meshSnapshotCached();
+        // 自定义入口也要进总览：用户配了自己的域名就该在这里看到它生效了。
+        const custom = await readCustomOrigin();
         const overview = buildChannelOverview({
           tunnel,
           directSnapshot,
           addresses: globalIpv6Addresses(),
           meshSnapshot,
+          custom,
         });
         // 版本号一并给出：面板要在同一个响应里同时回答「通道状态」和「插件版本」。
         // 读不到版本就 null，界面显示「—」，不编造。
@@ -486,6 +492,35 @@ function applyUnsafe(ctx, config = {}) {
     },
   }));
 
+  // ---- 自定义 HTTPS 入口（读写）----------------------------------------------
+  /**
+   * 用户已经有自己的 HTTPS 域名/反代时，用这条代替 Sakura。
+   * 写路径必须过桌面围栏：改对外入口等于改"手机从哪里连进来"，不能让远程设备做。
+   */
+  disposers.push(ctx.connection.fetch.register({
+    path: CUSTOM_ORIGIN_PATH,
+    methods: ['POST'],
+    requestBody: 'buffered',
+    fetch: async (request) => {
+      if (!isDesktopDirectRequest(headersObject(request))) {
+        return json(403, { ok: false, code: 'desktop-only', error: '自定义入口只允许在本机桌面设置' });
+      }
+      if (!isJsonRequest(request)) {
+        return json(415, { ok: false, code: 'bad-content-type', error: 'content-type 必须是 application/json' });
+      }
+      const body = await readJsonBody(request);
+      if (body === undefined) {
+        return json(400, { ok: false, code: 'bad-body', error: '请求体必须是不超过 4KB 的 JSON 对象' });
+      }
+      try {
+        const result = await setCustomOrigin(body);
+        return json(result.status, result.body);
+      } catch (error) {
+        return json(500, { ok: false, code: 'internal', error: messageOf(error) });
+      }
+    },
+  }));
+
   // ---- 应用更新（写）--------------------------------------------------------
   /**
    * 更新是写操作，必须本机桌面直连。更新方式与安全边界见 lib/update-service.js：
@@ -522,12 +557,13 @@ function applyUnsafe(ctx, config = {}) {
       path === SWITCH_PATH ||
       path === OVERVIEW_PATH ||
       path === DIRECT_PATH ||
+      path === CUSTOM_ORIGIN_PATH ||
       path === UPDATE_PATH ||
       path === UPDATE_APPLY_PATH;
     if (!ours) return next();
     const headers = request?.headers ?? {};
-    // 写接口（switch / direct / 应用更新）要桌面直连；只读接口本机即可。
-    const write = path === SWITCH_PATH || path === DIRECT_PATH || path === UPDATE_APPLY_PATH;
+    // 写接口（switch / direct / 自定义入口 / 应用更新）要桌面直连；只读接口本机即可。
+    const write = path === SWITCH_PATH || path === DIRECT_PATH || path === CUSTOM_ORIGIN_PATH || path === UPDATE_APPLY_PATH;
     const local = write ? isDesktopDirectRequest(headers) : isLocalStatusRequest(headers);
     return local ? next() : false;
   };

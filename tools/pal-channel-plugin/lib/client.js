@@ -101,6 +101,12 @@ window.__ModuleLoader__.load({
       hideHelp: "收起",
       showSetup: "配置说明",
       openDoc: "打开完整文档",
+      customPlaceholder: "https://你的域名（如 https://ds.example.com）",
+      customSave: "保存",
+      customClear: "清除",
+      customSaving: "保存中…",
+      customSaved: "已保存，网关 5 秒内生效；该域名已登记进 trustedHosts",
+      customInvalid: "地址不合法：必须是 https:// 加域名（不能是 IP 或自签证书）",
     };
     var en = {
       nav: "Public entry",
@@ -175,6 +181,12 @@ window.__ModuleLoader__.load({
       hideHelp: "Hide",
       showSetup: "Setup guide",
       openDoc: "Open full docs",
+      customPlaceholder: "https://your.domain (e.g. https://ds.example.com)",
+      customSave: "Save",
+      customClear: "Clear",
+      customSaving: "Saving…",
+      customSaved: "Saved. The gateway switches within 5s; the domain is now in trustedHosts",
+      customInvalid: "Invalid address: must be https:// plus a domain (not an IP or self-signed cert)",
     };
 
     var t = function (k) {
@@ -259,6 +271,24 @@ window.__ModuleLoader__.load({
         fontSize: "12px",
         color: "var(--dsw-alias-button-primary-fill, #4d6bfe)",
         textDecoration: "none",
+      },
+      input: {
+        boxSizing: "border-box",
+        width: "100%",
+        marginTop: "8px",
+        padding: "6px 9px",
+        fontSize: "12.5px",
+        borderRadius: "7px",
+        border: "1px solid var(--dsw-alias-border-l1, #30363d)",
+        background: "transparent",
+        color: "inherit",
+        font: "inherit",
+      },
+      inputRow: {
+        display: "flex",
+        gap: "8px",
+        alignItems: "center",
+        marginTop: "2px",
       },
       rowHead: {
         display: "flex",
@@ -477,6 +507,29 @@ window.__ModuleLoader__.load({
         headers: { "content-type": "application/json", accept: "application/json" },
         credentials: "same-origin",
         body: "{}",
+      })
+        .then(function (r) {
+          return r.json().then(
+            function (v) {
+              return { ok: r.ok, status: r.status, body: v };
+            },
+            function () {
+              return { ok: r.ok, status: r.status, body: null };
+            },
+          );
+        })
+        .catch(function (e) {
+          return { ok: false, status: 0, body: { error: String(e) } };
+        });
+    }
+
+    /** 保存 / 清除自定义 HTTPS 入口。只允许本机桌面（服务端 fence 会再挡一层）。 */
+    function requestCustomOrigin(origin) {
+      return fetch("/api/pal-channel/custom-origin", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ origin: origin }),
       })
         .then(function (r) {
           return r.json().then(
@@ -727,6 +780,16 @@ window.__ModuleLoader__.load({
       var expandedState = React.useState("");
       var expanded = expandedState[0];
       var setExpanded = expandedState[1];
+      // 自定义 HTTPS 入口的输入框与保存态（用它代替 Sakura 的用户）。
+      var customInputState = React.useState("");
+      var customInput = customInputState[0];
+      var setCustomInput = customInputState[1];
+      var customBusyState = React.useState(false);
+      var customBusy = customBusyState[0];
+      var setCustomBusy = customBusyState[1];
+      var customMsgState = React.useState("");
+      var customMsg = customMsgState[0];
+      var setCustomMsg = customMsgState[1];
 
       var reload = function () {
         return readOverview().then(function (data) {
@@ -793,6 +856,31 @@ window.__ModuleLoader__.load({
               (result.body && (result.body.error || result.body.reason)) ||
               "HTTP " + result.status;
             setMessage(t("failed") + "：" + String(reason).slice(0, 160));
+          }
+        });
+      };
+
+      var onSaveCustom = function (raw) {
+        if (customBusy) return;
+        var value = String(raw == null ? customInput : raw).trim();
+        // 客户端先做一次粗校验，把明显错的挡在本地；服务端还会再严格校验一次。
+        if (value !== "" && !/^https:\/\/[^\s/]+/i.test(value)) {
+          setCustomMsg(t("customInvalid"));
+          return;
+        }
+        setCustomBusy(true);
+        setCustomMsg(t("customSaving"));
+        requestCustomOrigin(value === "" ? null : value).then(function (result) {
+          setCustomBusy(false);
+          if (result.ok) {
+            var note = result.body && result.body.note;
+            setCustomMsg(typeof note === "string" && note ? note : t("customSaved"));
+            if (value === "") setCustomInput("");
+            reload();
+          } else {
+            var reason =
+              (result.body && (result.body.error || result.body.code)) || "HTTP " + result.status;
+            setCustomMsg(t("failed") + "：" + String(reason).slice(0, 160));
           }
         });
       };
@@ -968,9 +1056,63 @@ window.__ModuleLoader__.load({
               ),
             );
           }
+          // 自定义 HTTPS 入口：给一个输入框让用户填自己的域名，填了就直接用他给的地址。
+          if (ch.id === "custom") {
+            items.push(
+              React.createElement("input", {
+                key: "custom-input",
+                type: "url",
+                value: customInput,
+                placeholder: ch.origin || t("customPlaceholder"),
+                style: S.input,
+                spellCheck: false,
+                onChange: function (event) {
+                  setCustomInput(event && event.target ? event.target.value : "");
+                },
+              }),
+            );
+            items.push(
+              React.createElement(
+                "div",
+                { key: "custom-actions", style: S.inputRow },
+                React.createElement(
+                  "button",
+                  {
+                    type: "button",
+                    disabled: customBusy,
+                    style: S.primaryBtn,
+                    onClick: function () {
+                      onSaveCustom();
+                    },
+                  },
+                  customBusy ? t("customSaving") : t("customSave"),
+                ),
+                ch.origin
+                  ? React.createElement(
+                      "button",
+                      {
+                        type: "button",
+                        disabled: customBusy,
+                        style: S.linkBtn,
+                        // 「清除」= 清空输入框并让服务端删掉 customOrigin，回到 publicOrigin。
+                        onClick: function () {
+                          setCustomInput("");
+                          onSaveCustom("");
+                        },
+                      },
+                      t("customClear"),
+                    )
+                  : null,
+              ),
+            );
+            if (customMsg) {
+              items.push(React.createElement("div", { key: "custom-msg", style: S.meta }, customMsg));
+            }
+          }
           // 隧道通道的切换本来在另一个区块；合并后直接放在列表行里，
           // 用户在同一屏就能"看见 + 操作"，不用在两个设置页之间来回跳。
-          if (ch.group === "public" && ch.configured === true && ch.phase !== "current") {
+          // 自定义入口不给切换按钮：它不是插件提供的通道，只是换了发布地址。
+          if (ch.group === "public" && ch.id !== "custom" && ch.configured === true && ch.phase !== "current") {
             items.push(
               React.createElement(
                 "button",

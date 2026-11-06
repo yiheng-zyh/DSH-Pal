@@ -601,6 +601,19 @@ export function installForChannel(channel) {
         ],
         docUrl,
       };
+    case 'custom':
+      return {
+        title: '自定义 HTTPS 链接：用你自己的域名',
+        steps: [
+          '前提：你需要有一个能解析到这台电脑的域名，并且能申请到受信任的 TLS 证书（Let\'s Encrypt 就够）。IPv6 字面量和自签证书都不行 —— App 不信任自签证书。',
+          '方式一（推荐，家用最常见）：路由器/群晖上已有 nginx、caddy，把子域（如 ds.example.com）反代到这台电脑的网关端口（默认 18772）。caddy 只需两行：`ds.example.com { reverse_proxy 192.168.1.10:18772 }`。',
+          '方式二：Cloudflare Named 隧道 —— 在 Cloudflare Zero Trust 里建隧道、绑你自己的域名，本机跑 cloudflared，指向网关端口。地址固定，不会像 Quick 模式那样变。',
+          '方式三：公司/学校给了现成的 HTTPS 转发地址，直接把那个地址填进来即可。',
+          '填好保存后，本面板会把该域名登记进插件 trustedHosts（首次配对必需），网关约 5 秒内改用这个入口；然后用 show-pair 出二维码给手机扫。',
+          '注意：反代必须透传原始 Host 头（nginx 用 `proxy_set_header Host $host;`）。改写了 Host 会被插件的 Host 白名单挡成 403 —— 这和 DSH 本体「不能套反代」是同一类问题。',
+        ],
+        docUrl,
+      };
     default:
       return null;
   }
@@ -614,7 +627,7 @@ export function installForChannel(channel) {
  * @param addresses - globalIpv6Addresses 的返回值
  * @param meshSnapshot - collectMesh 的返回值（电脑侧组网准备情况）
  */
-export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], meshSnapshot = null }) {
+export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], meshSnapshot = null, custom = null }) {
   const channels = [];
 
   // ---- 隧道通道（公网）------------------------------------------------------
@@ -662,6 +675,25 @@ export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], m
   const entries = directSnapshot?.entries ?? [];
   channels.push(directChannel({ kind: 'ipv6', label: 'IPv6 直连', direct, entries, addresses }));
   channels.push(directChannel({ kind: 'lan', label: 'Wi-Fi 直连', direct, entries, addresses }));
+
+  // ---- 自定义 HTTPS 入口（用户自己的域名/反代）--------------------------------
+  // 放在隧道通道之后：它和隧道是同一类（公网 HTTPS 域名），只是地址由用户自己提供。
+  const customOrigin = custom?.customOrigin ?? null;
+  channels.push({
+    id: 'custom',
+    name: '自定义 HTTPS 链接',
+    group: 'public',
+    configured: customOrigin !== null,
+    enabled: customOrigin !== null,
+    phase: customOrigin !== null ? 'ready' : 'off',
+    origin: customOrigin,
+    // 自定义入口不与插件通道切换联动：它只是把发布地址换成用户自己的域名。
+    switchable: false,
+    editable: true,
+    detail: customOrigin
+      ? `正在使用你的域名作为对外入口（原 publicOrigin：${custom?.publicOrigin ?? '未设置'}）`
+      : '有自己的域名或反代时填这里：nginx/caddy 反代、Cloudflare Named 隧道、公司/学校的 HTTPS 转发都算',
+  });
 
   // ---- 组网通道（电脑侧准备情况）---------------------------------------------
   // 原先写死「手机端管理，电脑侧无法确认」—— 那句话是错的：电脑侧明明能查到
