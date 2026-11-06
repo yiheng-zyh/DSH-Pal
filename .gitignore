@@ -66,3 +66,17 @@ screenshots-local/
 !/tools/collect-device-diagnostics.ps1
 !/tools/start-usb-development.ps1
 !/tools/prepare-tailscale-sdk.ps1
+# ---- Author-private working material (NEVER publish) ----
+# AI handoff notes, personal checklists, real logs, requirement sheets and
+# anything else that exists because of how this project is developed rather
+# than because a user needs it to run the app.
+/.ai/
+USER-REQUIREMENTS.md
+AGENTS.md
+AGENTS-*.md
+HANDOFF*.md
+DECISIONS.md
+/docs/当前状态.md
+/docs/待推送改动.md
+/docs/日志诊断对照.md
+/docs/用户核对清单.md.bak*
