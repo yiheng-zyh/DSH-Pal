@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DSH Pal 下载 — 安卓客户端</title>
+<meta name="description" content="DSH Pal 是 DeepSeek Harness 的安卓远程客户端。下载最新版安装包，附安装说明与 SHA-256 校验。">
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --line:#262b36; --fg:#e8ecf3; --muted:#9aa4b5;
+    --accent:#3b82f6; --accent-2:#2563eb; --ok:#22c55e; --warn:#f59e0b;
+  }
+  @media (prefers-color-scheme: light){
+    :root{--bg:#f6f7f9;--card:#fff;--line:#e3e6eb;--fg:#1a1d23;--muted:#5b6472;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    padding:28px 16px 64px}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:.5px}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin:0 0 16px}
+  .ver{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .tag{background:rgba(59,130,246,.14);color:var(--accent);border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600}
+  .muted{color:var(--muted);font-size:13px}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;padding:15px 18px;border-radius:12px;border:1px solid transparent;
+    font-size:17px;font-weight:600;text-decoration:none;cursor:pointer;margin:0 0 10px}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-2)}
+  .btn-ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+  .btn-ghost:hover{border-color:var(--accent)}
+  .hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+  .pwd{display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.12);
+    border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:14px}
+  .pwd b{font-family:ui-monospace,Consolas,monospace;font-size:17px;letter-spacing:2px;color:var(--warn)}
+  .pwd button{margin-left:auto;background:transparent;border:1px solid var(--line);color:var(--fg);
+    border-radius:8px;padding:5px 10px;font-size:13px;cursor:pointer}
+  h2{font-size:17px;margin:0 0 10px}
+  ol,ul{margin:0;padding-left:20px}
+  li{margin:5px 0}
+  code{background:rgba(127,127,127,.14);border-radius:5px;padding:2px 6px;
+    font-family:ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all}
+  .sha{display:block;background:rgba(127,127,127,.1);border-radius:8px;padding:10px 12px;margin:8px 0;
+    font-family:ui-monospace,Consolas,monospace;font-size:12px;word-break:break-all;user-select:all}
+  details{border-top:1px solid var(--line);padding:12px 0 0;margin-top:12px}
+  details summary{cursor:pointer;font-weight:600;font-size:15px}
+  details[open] summary{margin-bottom:8px}
+  .warn{border-left:3px solid var(--warn);padding-left:12px;color:var(--muted);font-size:13px}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:26px}
+  a{color:var(--accent)}
+  .toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);
+    background:#111827;color:#fff;padding:10px 18px;border-radius:10px;opacity:0;
+    transition:.25s;pointer-events:none;font-size:14px}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DSH Pal</h1>
+  <p class="sub">DeepSeek Harness 的安卓客户端 · 手机连电脑上的 DSH 使用</p>
+
+  <div class="card">
+    <div class="ver">
+      <span class="tag" id="ver">最新版</span>
+      <span class="muted" id="meta"></span>
+    </div>
+
+    <a class="btn btn-primary" id="lanzou" href="#" target="_blank" rel="noopener">⬇ 下载 APK（国内推荐）</a>
+    <div class="pwd" id="pwdRow" hidden>
+      <span>网盘提取码</span><b id="pwd">—</b>
+      <button id="copyPwd" type="button">复制</button>
+    </div>
+    <p class="hint" id="lanzouHint">点开网盘文件夹后，依次下载安装包、安装说明和 SHA256SUMS.txt。</p>
+
+    <a class="btn btn-ghost" id="github" href="#" target="_blank" rel="noopener">GitHub Releases（备用）</a>
+  </div>
+
+  <div class="card">
+    <h2>装之前先看这个</h2>
+    <ol>
+      <li>这是<b>手机端</b>。电脑上要先装好 DSH，手机才有东西可连：<a id="desktop" href="#" target="_blank" rel="noopener">电脑端下载</a>。</li>
+      <li>点开 APK 安装；系统提示「禁止安装未知来源应用」时允许一次即可。</li>
+      <li>装完打开，按引导扫码配对或填电脑地址。</li>
+      <li><b>覆盖安装不会丢数据</b>，更新时直接装新版，不要卸载。</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>确认文件没被改过（建议做）</h2>
+    <p class="hint" style="margin-bottom:6px">官方安装包的 SHA-256：</p>
+    <span class="sha" id="sha">—</span>
+    <details>
+      <summary>Windows 上怎么核对（30 秒，不用装软件）</summary>
+      <ol>
+        <li>把 APK 和 <code>SHA256SUMS.txt</code> 放在同一个文件夹。</li>
+        <li>在该文件夹的地址栏输入 <code>cmd</code> 回车。</li>
+        <li>粘贴并回车：<code>certutil -hashfile <span id="apkName2">DSH-Pal.apk</span> SHA256</code></li>
+        <li>输出的一串和上面的完全一样，说明文件没被改过。</li>
+      </ol>
+      <p class="warn">手机上不方便时：用 MT 管理器等文件工具长按文件 → 属性 / 校验值 → SHA256，同样对比。</p>
+    </details>
+    <details>
+      <summary>装不上 / 报错怎么办</summary>
+      <ul>
+        <li><b>提示「与已安装版本冲突」「签名不符」</b>：这不是官方签名包，别装，回来重新下载。</li>
+        <li><b>提示「解析包错误」</b>：下载不完整，重下（建议 WiFi）。</li>
+        <li><b>装完白屏或连不上</b>：多半是电脑端 DSH 没开或地址不对，先看 App 里「连接帮助」。</li>
+      </ul>
+    </details>
+  </div>
+
+  <p class="warn">任何「修改版」「破解版」「内置加速版」都不是官方包，不要安装。只认准本页和 GitHub Releases 两个来源。</p>
+
+  <footer>
+    <a href="https://github.com/yiheng-zyh/DSH-Pal">GitHub 仓库</a> ·
+    <a href="https://github.com/yiheng-zyh/DSH-Pal/issues">问题反馈</a>
+    <div style="margin-top:8px">本页 URL 永久不变，以后新版本会自动更新在这里。</div>
+  </footer>
+</div>
+<div class="toast" id="toast">已复制</div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  function toast(msg){
+    var t = $('toast'); t.textContent = msg || '已复制'; t.classList.add('show');
+    setTimeout(function(){ t.classList.remove('show'); }, 1600);
+  }
+  function apply(d){
+    if(!d) return;
+    if(d.version) $('ver').textContent = 'v' + d.version;
+    var bits = [];
+    if(d.apkName) bits.push(d.apkName);
+    if(d.sizeMb) bits.push(d.sizeMb + ' MB');
+    if(d.updated) bits.push(d.updated + ' 更新');
+    $('meta').textContent = bits.join(' · ');
+    if(d.apkName) $('apkName2').textContent = d.apkName;
+    if(d.sha256) $('sha').textContent = d.sha256;
+    if(d.github) $('github').href = d.github;
+    if(d.desktop) $('desktop').href = d.desktop;
+    if(d.lanzou && d.lanzou.url){
+      $('lanzou').href = d.lanzou.url;
+      if(d.lanzou.password){
+        $('pwdRow').hidden = false;
+        $('pwd').textContent = d.lanzou.password;
+        $('lanzouHint').textContent = '点开网盘文件夹，输入上面的提取码，下载安装包与安装说明。';
+      }
+    }
+  }
+  // Cache-busted so a new release shows up immediately.
+  fetch('download.json?t=' + Date.now(), {cache:'no-store'})
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(apply)
+    .catch(function(){});
+  $('copyPwd').addEventListener('click', function(){
+    var v = $('pwd').textContent || '';
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(v).then(function(){ toast('提取码已复制'); }, function(){ toast(v); });
+    } else {
+      var ta = document.createElement('textarea'); ta.value = v; document.body.appendChild(ta);
+      ta.select(); try { document.execCommand('copy'); toast('提取码已复制'); } catch(e){ toast(v); }
+      document.body.removeChild(ta);
+    }
+  });
+})();
+</script>
+</body>
+</html>
