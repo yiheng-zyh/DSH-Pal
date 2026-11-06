@@ -42,7 +42,7 @@ window.__ModuleLoader__.load({
       cloudflareHint: "走 Cloudflare，域名固定但延迟较高",
       current: "当前",
       switching: "切换中…",
-      switched: "已切换，重启 DSH 后生效",
+      switched: "已切换公布地址，重启 DSH 后生效（已配对设备的地址不变）",
       failed: "切换失败",
       address: "当前公布地址",
       channelsNav: "PAL 网关管理",
@@ -51,9 +51,9 @@ window.__ModuleLoader__.load({
         "不是猜的：直连看「网关有没有真的绑上监听」，隧道看「当前配置走哪条」。",
       channelsLoading: "读取通道状态…",
       channelsUnavailable: "暂时读不到通道状态（网关或插件未就绪）",
-      phaseCurrent: "当前使用",
+      phaseCurrent: "当前公布",
       phaseReady: "已开启",
-      phaseAvailable: "可切换",
+      phaseAvailable: "可切换公布",
       phaseUnconfigured: "未配置",
       phasePending: "已开启但未监听",
       phaseUnknown: "外部未验证",
@@ -96,7 +96,7 @@ window.__ModuleLoader__.load({
       noticeUpdating: "更新中…",
       noticeDone: "已更新，重启 DSH 后生效",
       noticeUpToDate: "已是最新版本",
-      switchTo: "切到这条",
+      switchTo: "改由这条公布",
       showHelp: "怎么办",
       hideHelp: "收起",
       showSetup: "配置说明",
@@ -107,8 +107,11 @@ window.__ModuleLoader__.load({
       customSaving: "保存中…",
       customSaved: "已保存，网关 5 秒内生效；该域名已登记进 trustedHosts",
       customInvalid: "地址不合法：必须是 https:// 加域名（不能是 IP 或自签证书）",
-      tunnelGroupTitle: "公网隧道（二选一）",
-      tunnelGroupHint: "这两条只能同时走一条；切换会改对外公布的地址，已配对设备不用重扫。",
+      tunnelGroupTitle: "公网隧道（同一时间只公布一条）",
+      tunnelGroupHint:
+        "切换只决定对外公布哪一个地址（二维码和新配对指向哪条），" +
+        "不会改已配对设备正在用的地址，也不会让它们掉线。" +
+        "隧道进程是否在后台运行由系统决定，与这里的选择无关。",
     };
     var en = {
       nav: "Public entry",
@@ -132,9 +135,9 @@ window.__ModuleLoader__.load({
         "Direct links report what the gateway actually bound; tunnels report the configured route.",
       channelsLoading: "Reading channels…",
       channelsUnavailable: "Channel status unavailable (gateway or plugin not ready)",
-      phaseCurrent: "In use",
+      phaseCurrent: "Published",
       phaseReady: "On",
-      phaseAvailable: "Available",
+      phaseAvailable: "Can publish",
       phaseUnconfigured: "Not configured",
       phasePending: "On but not listening",
       phaseUnknown: "Not verified externally",
@@ -178,7 +181,7 @@ window.__ModuleLoader__.load({
       noticeUpdating: "Updating…",
       noticeDone: "Updated. Restart DSH to take effect",
       noticeUpToDate: "Already up to date",
-      switchTo: "Switch to this",
+      switchTo: "Publish via this",
       showHelp: "What to do",
       hideHelp: "Hide",
       showSetup: "Setup guide",
@@ -189,8 +192,12 @@ window.__ModuleLoader__.load({
       customSaving: "Saving…",
       customSaved: "Saved. The gateway switches within 5s; the domain is now in trustedHosts",
       customInvalid: "Invalid address: must be https:// plus a domain (not an IP or self-signed cert)",
-      tunnelGroupTitle: "Public tunnels (pick one)",
-      tunnelGroupHint: "Only one of these is active at a time. Switching changes the published address; paired devices do not need to re-scan.",
+      tunnelGroupTitle: "Public tunnels (one published at a time)",
+      tunnelGroupHint:
+        "Switching only decides which address is published (what the QR code and new pairings " +
+        "point to). It does not change the address an already-paired device uses, and does not " +
+        "disconnect it. Whether a tunnel process runs in the background is decided by the system, " +
+        "not by this choice.",
     };
 
     var t = function (k) {

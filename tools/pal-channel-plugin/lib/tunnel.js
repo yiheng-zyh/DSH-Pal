@@ -72,26 +72,6 @@ function gatewayPids() {
   );
 }
 
-/** 停掉一组 PID；已经退出的跳过。 */
-async function killPids(pids) {
-  if (pids.length === 0) return { killed: [], failed: [] };
-  const killed = [];
-  const failed = [];
-  for (const pid of pids) {
-    try {
-      await run('taskkill.exe', ['/PID', String(pid), '/F'], {
-        timeout: 10000,
-        windowsHide: true,
-      });
-      killed.push(pid);
-    } catch {
-      // 进程可能已经自己退了，这不算失败。
-      failed.push(pid);
-    }
-  }
-  return { killed, failed };
-}
-
 /** 通过既有计划任务拉起 remote-access 栈（内部 wscript 隐藏窗口）。 */
 async function startStack() {
   await run('schtasks.exe', ['/run', '/tn', `\\${STACK_TASK}`], {
@@ -102,64 +82,70 @@ async function startStack() {
 }
 
 /**
- * 停掉 remote-web-ui 启动的 cloudflared。
- *
- * 为什么由我们来停：cloudflared 是**上游插件的子进程**，停掉父 fiber 不一定会
- * 连带杀掉它（上游未必在 dispose 里 kill）。切回国内后它还连着 Cloudflare，
- * 继续占上行带宽，用户会看到「切回来了但上传仍是 Cloudflare」。
- *
- * 只按可执行名 cloudflared 匹配 —— 本机只有这一个 tunnel 客户端，
- * 且它的存在与否完全由通道选择决定，杀掉是安全的。
- * @returns 实际停掉的进程数。
- */
-async function stopCloudflared() {
-  const pids = await findPids("Get-CimInstance Win32_Process -Filter \"Name='cloudflared.exe'\"");
-  if (pids.length === 0) return 0;
-  const { killed } = await killPids(pids);
-  return killed.length;
-}
-
-/**
  * 切换后让隧道进程与实际通道一致。
+ *
+ * ## 2026-11-06 语义修正（用户实测反馈）
+ *
+ * 早先实现是「切到哪条就停另一条」，但用户实测发现：切到 Cloudflare 后，
+ * 国内的 frpc 仍会被 `DSH-Pal-Remote-Access-Watchdog`（每 5 分钟）重新拉起。
+ * 于是"停掉"最多维持 5 分钟 —— 表面上是两条都在跑，实际上取决于 watchdog
+ * 什么时候跑，属于**凑巧**，不是可依赖的状态。
+ *
+ * 现在的口径（用户明确要求「固化成持久的，不可以只是凑巧的」）：
+ *   **切换只改"公布哪个地址"，本模块不再主动杀任何隧道进程。**
+ *
+ * 两条隧道真实的存活机制（如实记录，别把它们说成对称的）：
+ *   - 国内 frp：计划任务 `DSH-Pal-Remote-Access` + Watchdog 每 5 分钟守护 → **持久**，
+ *     就算我们杀了它也会被拉回来。
+ *   - Cloudflare：cloudflared 是 remote-web-ui 插件的子进程，**完全由该插件的
+ *     `tunnelPlanOf()` 决定**：`autoTunnel=true` 时插件自己起它（quick 模式）；
+ *     切到 domestic 时配置里 `autoTunnel=false`，插件会主动 `tunnel.stop()` 把它关掉
+ *     （见上游 lib/index.js 的 `tunnel.stop()` 调用点）。**这一条不由我们控制。**
+ *
+ * 所以"两条同时常驻"在当前插件架构下**做不到**：
+ * 插件只支持一个 tunnel 模式，切到国内时它必然关掉 cloudflared。
+ * 本模块能做的是「不去火上浇油」—— 不再额外杀 frpc / 网关，让国内那条
+ * 始终可用（它本来也有 watchdog 兜着）。
+ *
+ * 为什么不杀也不会冲突（2026-11-06 实测核对）：
+ *   - 端口不重叠：网关监听 127.0.0.1:18772，cloudflared 只监听自己的本地端口；
+ *   - 目标一致：两条最终都转发到同一个 DSH 端口（网关 → DSH，cloudflared → DSH）；
+ *   - 出站独立：各走各的上游，互不干扰。
  *
  * @param channel - 'cloudflare' | 'domestic'
  * @returns 结构化的联动结果，供界面如实展示。
  */
 export async function reconcileTunnel(channel) {
   if (channel === 'cloudflare') {
+    // 不再杀 frpc / 网关：它们由计划任务与 watchdog 常驻，杀掉只会制造
+    // 「5 分钟后被拉回来」的不确定状态。这里只保证 cloudflared 已经由插件拉起。
     const [gateway, frpc] = await Promise.all([gatewayPids(), frpcPids()]);
-    const all = [...new Set([...gateway, ...frpc])];
-    if (all.length === 0) {
-      return { ok: true, action: 'none', detail: '国内隧道本来就没在运行' };
-    }
-    const { killed } = await killPids(all);
+    const running = gateway.length > 0 || frpc.length > 0;
     return {
       ok: true,
-      action: 'stopped',
-      stopped: killed.length,
-      detail:
-        `已停掉国内隧道（网关 ${gateway.length} 个、frpc ${frpc.length} 个进程），` +
-        '现在只有 Cloudflare 在跑',
+      action: 'kept',
+      detail: running
+        ? `已改为由 Cloudflare 对外公布。国内隧道保持运行（网关 ${gateway.length} 个、frpc ${frpc.length} 个），已配对设备可继续用原地址。`
+        : '已改为由 Cloudflare 对外公布。国内隧道当前未运行。',
     };
   }
 
   if (channel === 'domestic') {
-    // 切回国内时也要把 Cloudflare 停掉，否则它继续占着上行带宽
-    // （2026-11-04 用户实测：切到 Cloudflare 后看到上传带宽仍来自 frpc，
-    // 反过来切回国内时 cloudflared 同样会继续跑）。
-    const stoppedCloudflared = await stopCloudflared();
-
-    // 已经在跑就不重复拉起（计划任务拉起是幂等的，但少一次是一次的干净）。
+    // 同样不停 cloudflared：它由插件维持，DSH 在跑它就在。
+    // 只确保国内这条是活的（没活起来就通过计划任务拉起）。
     const [gateway, frpc] = await Promise.all([gatewayPids(), frpcPids()]);
-    const cfNote = stoppedCloudflared > 0 ? `；已停掉 ${stoppedCloudflared} 个 cloudflared 进程` : '';
     if (gateway.length > 0 && frpc.length > 0) {
-      return { ok: true, action: 'none', detail: `国内隧道已在运行${cfNote}` };
+      return {
+        ok: true,
+        action: 'kept',
+        detail: '已改为由国内 frp 对外公布。国内隧道本来就在运行，Cloudflare 那条也保持不动。',
+      };
     }
     await startStack();
     return {
       ok: true,
       action: 'started',
-      detail: `已通过计划任务 ${STACK_TASK} 拉起国内隧道（约 10-20 秒后 frpc 连上）${cfNote}`,
+      detail: `已通过计划任务 ${STACK_TASK} 拉起国内隧道（约 10-20 秒后 frpc 连上）；Cloudflare 那条保持不动。`,
     };
   }
 

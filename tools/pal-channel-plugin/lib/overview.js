@@ -644,9 +644,9 @@ export function buildChannelOverview({ tunnel, directSnapshot, addresses = [], m
       phase: isCurrent ? 'current' : item.available === true ? 'available' : 'unconfigured',
       origin: item.origin ?? null,
       detail: isCurrent
-        ? '当前正在走这条'
+        ? '二维码和新配对指向这条；已配对设备仍用它原来保存的地址'
         : item.available === true
-          ? '已配置，可切换'
+          ? '已配置可用，切换后改由这条对外公布'
           : '未配置',
       /**
        * 国内 frp 的免费流量需要**每天签到领取**。不签到就没有可用额度，
