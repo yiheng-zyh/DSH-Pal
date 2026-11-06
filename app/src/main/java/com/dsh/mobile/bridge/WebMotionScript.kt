@@ -30,6 +30,13 @@ object WebMotionScript {
       isolation:isolate;
     }
     [data-dsh-left-managed] > [data-dsh-mobile-center] { grid-column:1/-1!important; min-width:0!important; width:100%!important; }
+    /* remote-web-ui pins the frame to "0 1fr 0" with !important whenever the
+       sidebar is collapsed. On the phone the drawer owns the left column and the
+       right rail is absolutely positioned, so those extra tracks only squeeze the
+       right rail to zero width — its open button then looks dead. Keep one track,
+       at a specificity that beats the plugin rule. */
+    [data-dsh-mobile-frame][class*="_frame"] { grid-template-columns:minmax(0,1fr)!important; }
+    [data-dsh-mobile-frame][class*="_frame"][data-dsh-left-managed] { grid-template-columns:minmax(0,1fr)!important; }
     [data-dsh-left-managed] > [data-dsh-mobile-sidebar] {
       position:absolute!important; inset:0 auto 0 0!important;
       width:min(86vw,340px)!important; min-width:0!important; max-width:calc(100vw - 44px)!important;
