@@ -1,4 +1,13 @@
 {
   "schemaVersion": 1,
-  "announcements": []
+  "announcements": [
+    {
+      "id": "2026-11-06-dsh-drawer-compat",
+      "title": "0.1.1：修复新版 DSH 桌面端下的左右侧边栏",
+      "body": "如果你的电脑端 DSH 刚升级过，可能会遇到：左侧边栏只显示一层灰色遮罩、点不动；或者右侧边栏点开后按钮消失、没有反应。这两处都是桌面端新版界面变化引起的，0.1.1 已修复。\n\n更新方式：设置 → 更新与公告 → 检查更新，覆盖安装即可保留现有数据与连接配置。",
+      "publishedAt": "2026-11-06",
+      "minVersionCode": 8,
+      "maxVersionCode": 9
+    }
+  ]
 }

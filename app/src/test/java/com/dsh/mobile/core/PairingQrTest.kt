@@ -1,4 +1,4 @@
-package com.dsh.mobile.core
+﻿package com.dsh.mobile.core
 
 import java.net.URLEncoder
 import org.junit.Assert.*
@@ -6,7 +6,7 @@ import org.junit.Test
 
 class PairingQrTest {
     @Test fun domesticHttpsPairsWithoutSelectingAProvider() {
-        val url = "https://www.example.nyat.app:12451/pair-accept?pair=fixture"
+        val url = "https://www.example.test:12451/pair-accept?pair=fixture"
         val entry = PairingQr.parse(url)
         assertEquals(ConnectionProfile.Kind.CUSTOM, entry.kind)
         assertEquals(url, entry.url)
