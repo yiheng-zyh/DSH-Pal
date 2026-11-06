@@ -100,7 +100,7 @@ object WebDrawerMotion {
     @media(max-width:900px) and (pointer:coarse){
       [data-dsh-mobile-frame]{position:relative!important;grid-template-columns:minmax(0,1fr)!important;transition:none!important;isolation:isolate}
       [data-dsh-mobile-center]{grid-column:1/-1!important;min-width:0!important;width:100%!important}
-      [data-dsh-mobile-sidebar]{position:absolute!important;inset:0 auto 0 0!important;width:min(86vw,340px)!important;min-width:0!important;max-width:calc(100vw - 44px)!important;height:100%!important;z-index:50!important;background:#1e2025!important;transform:none!important;transition:none!important;contain:layout;view-transition-name:dsh-left-drawer}
+      [data-dsh-mobile-sidebar]{position:absolute!important;inset:0 auto 0 0!important;width:min(86vw,340px)!important;min-width:0!important;max-width:calc(100vw - 44px)!important;height:100%!important;z-index:72!important;background:#1e2025!important;transform:none!important;transition:none!important;contain:layout;view-transition-name:dsh-left-drawer}
       [data-sidebar-collapsed] [data-dsh-mobile-sidebar],[data-sidebar-collapsed] [data-dsh-mobile-sidebar] *{visibility:hidden!important;pointer-events:none!important}
       .dsh-drawer-scrim{display:block;position:absolute;inset:0;z-index:40;background:rgba(0,0,0,.36);touch-action:none;view-transition-name:dsh-left-shade}
       [data-sidebar-collapsed]>.dsh-drawer-scrim{visibility:hidden;pointer-events:none}
