@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({
       switched: "已切换，重启 DSH 后生效",
       failed: "切换失败",
       address: "当前公布地址",
-      channelsNav: "连接通道总览",
+      channelsNav: "PAL 网关管理",
       channelsHint:
         "这台电脑目前有哪几条路能让手机连上、各自现在什么状态。状态来自网关实测与文件事实，" +
         "不是猜的：直连看「网关有没有真的绑上监听」，隧道看「当前配置走哪条」。",
@@ -107,6 +107,8 @@ window.__ModuleLoader__.load({
       customSaving: "保存中…",
       customSaved: "已保存，网关 5 秒内生效；该域名已登记进 trustedHosts",
       customInvalid: "地址不合法：必须是 https:// 加域名（不能是 IP 或自签证书）",
+      tunnelGroupTitle: "公网隧道（二选一）",
+      tunnelGroupHint: "这两条只能同时走一条；切换会改对外公布的地址，已配对设备不用重扫。",
     };
     var en = {
       nav: "Public entry",
@@ -124,7 +126,7 @@ window.__ModuleLoader__.load({
       switched: "Switched. Restart DSH to take effect",
       failed: "Switch failed",
       address: "Published address",
-      channelsNav: "Connection channels",
+      channelsNav: "PAL Gateway",
       channelsHint:
         "Which routes can reach this computer right now, and what state each one is in. " +
         "Direct links report what the gateway actually bound; tunnels report the configured route.",
@@ -187,6 +189,8 @@ window.__ModuleLoader__.load({
       customSaving: "Saving…",
       customSaved: "Saved. The gateway switches within 5s; the domain is now in trustedHosts",
       customInvalid: "Invalid address: must be https:// plus a domain (not an IP or self-signed cert)",
+      tunnelGroupTitle: "Public tunnels (pick one)",
+      tunnelGroupHint: "Only one of these is active at a time. Switching changes the published address; paired devices do not need to re-scan.",
     };
 
     var t = function (k) {
@@ -264,6 +268,37 @@ window.__ModuleLoader__.load({
         lineHeight: "1.7",
         color: "var(--dsw-alias-label-secondary, #8b949e)",
         marginBottom: "4px",
+      },
+      // 两条隧道「二选一」的视觉分组：左下角一个小标记线，表示这两条互斥。
+      tunnelGroup: {
+        border: "1px solid var(--dsw-alias-border-l1, #30363d)",
+        borderRadius: "10px",
+        padding: "10px 12px 4px",
+        marginBottom: "10px",
+        background: "var(--dsw-alias-bg-layer-2, rgba(255,255,255,0.02))",
+      },
+      tunnelGroupHead: {
+        display: "flex",
+        alignItems: "baseline",
+        justifyContent: "space-between",
+        gap: "10px",
+        marginBottom: "6px",
+      },
+      tunnelGroupTitle: {
+        fontSize: "12px",
+        fontWeight: "600",
+        color: "var(--dsw-alias-label-secondary, #8b949e)",
+      },
+      tunnelGroupHint: {
+        fontSize: "11.5px",
+        lineHeight: "1.6",
+        color: "var(--dsw-alias-label-tertiary, #6e7681)",
+        marginBottom: "6px",
+      },
+      // 组内的行去掉自己的底部分隔线，避免和组合框边框重复。
+      rowBoxInGroup: {
+        padding: "8px 0",
+        borderBottom: "none",
       },
       docLink: {
         display: "inline-block",
@@ -938,7 +973,10 @@ window.__ModuleLoader__.load({
           React.createElement("div", { key: "nan", style: S.meta }, t("channelsUnavailable")),
         );
       } else {
+        // 公网隧道那一组单独收集，最后整体套一个框；其余通道直接进 rows。
+        var tunnelRows = [];
         channels.forEach(function (ch, index) {
+          var inTunnelGroup = ch.group === "public" && ch.id !== "custom";
           var items = [
             React.createElement(
               "div",
@@ -1129,8 +1167,34 @@ window.__ModuleLoader__.load({
               ),
             );
           }
-          rows.push(React.createElement("div", { key: ch.id || index, style: S.rowBox }, items));
+          var rowNode = React.createElement(
+            "div",
+            { key: ch.id || index, style: inTunnelGroup ? S.rowBoxInGroup : S.rowBox },
+            items,
+          );
+          if (inTunnelGroup) tunnelRows.push(rowNode);
+          else rows.push(rowNode);
         });
+
+        // 两条隧道（国内 frp / Cloudflare）是**二选一**关系，必须视觉上框在一起，
+        // 否则用户会以为它们是两条可以同时开的路。
+        // 做法：先把它们从 rows 里摘出来装进一个框，再整体插回列表最前面。
+        if (tunnelRows.length > 0) {
+          rows.unshift(
+            React.createElement(
+              "div",
+              { key: "tunnel-group", style: S.tunnelGroup },
+              [
+                React.createElement(
+                  "div",
+                  { key: "th", style: S.tunnelGroupHead },
+                  React.createElement("span", { style: S.tunnelGroupTitle }, t("tunnelGroupTitle")),
+                ),
+                React.createElement("div", { key: "thi", style: S.tunnelGroupHint }, t("tunnelGroupHint")),
+              ].concat(tunnelRows),
+            ),
+          );
+        }
       }
 
       var updateText = "";
@@ -1233,6 +1297,26 @@ window.__ModuleLoader__.load({
           React.createElement("div", { key: "dh", style: S.meta }, t("directToggleHint")),
         ],
       );
+    }
+
+    /** 把浏览器半的失败落到 host 日志，避免再次静默消失。 */
+    function reportFailure(stage, error) {
+      var detail = String((error && (error.stack || error.message)) || error).slice(0, 600);
+      try {
+        fetch("/api/pal-channel/client-log", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ stage: stage, detail: detail }),
+        }).catch(function () {});
+      } catch (e) {
+        /* 忽略 */
+      }
+      try {
+        console.error("[pal-channel] " + stage, error);
+      } catch (e) {
+        /* 忽略 */
+      }
     }
 
     function apply(ctx) {

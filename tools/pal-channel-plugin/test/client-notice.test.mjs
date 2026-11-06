@@ -10,6 +10,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 
 globalThis.window = {
   __ModuleLoader__: {
@@ -153,4 +154,45 @@ test('合并后的总览里同时有隧道切换按钮和直连开关，功能�
   assert.match(text, /turnOn|turnOff/, '直连通道要有开关');
   assert.match(text, /18772/, '要显示直连地址');
   assert.match(text, /2001:250::1/, '地址要带出来');
+});
+
+test('浏览器半的 reportFailure 必须存在（曾经被误删导致插件静默失败）', async () => {
+  const source = await fs.readFile(
+    new URL('../lib/client.js', import.meta.url),
+    'utf8',
+  );
+  // 2026-11-06 的教训：合并设置入口时脚本删组件，把 reportFailure 定义一起带走了，
+  // 于是 apply 里每次报错都会抛 ReferenceError —— 插件加载失败变成完全静默。
+  assert.match(source, /function reportFailure\s*\(/, 'reportFailure 必须有定义');
+  assert.match(source, /\/api\/pal-channel\/client-log/, '失败要落到 host 日志');
+  // 有调用就必须有定义，数量至少能对上（1 个定义，多处调用）。
+  const calls = (source.match(/reportFailure\(/g) || []).length;
+  assert.ok(calls > 1, `应至少有定义 + 调用，实际出现 ${calls} 次`);
+});
+
+test('公网隧道两条要框在「二选一」分组里，其它通道不进这个框', () => {
+  const overview = {
+    ok: true,
+    pluginVersion: '0.1.0',
+    channels: [
+      { id: 'domestic', name: '国内 frp 隧道', group: 'public', configured: true, enabled: true, phase: 'current', origin: 'https://a.example:12451', detail: '' },
+      { id: 'cloudflare', name: 'Cloudflare 快速隧道', group: 'public', configured: true, enabled: false, phase: 'available', origin: null, detail: '' },
+      { id: 'ipv6', name: 'IPv6 直连', group: 'direct', configured: false, enabled: false, phase: 'off', origin: null, detail: '' },
+    ],
+    checks: {
+      ipv6: { count: 2, addresses: ['2001:250::1'] },
+      gateway: { running: true },
+      installed: true,
+      direct: { enabled: false, ipv6: false, lan: false },
+    },
+  };
+  const client = loadComponent(
+    makeReact([{ phase: 'ok', data: overview }, { phase: 'idle', data: null }, '', '', false, false]),
+  );
+  const text = JSON.stringify(client.ChannelsPanel());
+  assert.match(text, /tunnelGroupTitle/, '要有分组标题');
+  assert.match(text, /tunnelGroupHint/, '要说明只能同时走一条');
+  assert.match(text, /tunnel-group/, '两条隧道要装进同一个分组容器');
+  // 组内行的样式是"无底部分隔线"，与组外行区分（组外是 1px solid）。
+  assert.match(text, /borderBottom\\?":\\?"none/, '组内行要去掉底部分隔线');
 });
