@@ -50,6 +50,13 @@ object WebMotionScript {
       opacity:1; visibility:visible; touch-action:none;
       transition:opacity 260ms cubic-bezier(.2,0,0,1),visibility 0s;
     }
+    /* A native-drawer desktop already paints its own darkening mask. This scrim
+       then carries no colour at all: it exists only to turn "tap the empty area
+       beside the drawer" into a close, so it must sit above that mask (70) and
+       below the drawer itself (72). */
+    [data-dsh-mobile-native-drawer] > .dsh-mobile-sidebar-scrim {
+      z-index:71!important; background:transparent!important;
+    }
     :is([data-sidebar-collapsed],[data-dsh-left-closed]) > .dsh-mobile-sidebar-scrim {
       opacity:0; visibility:hidden; pointer-events:none;
       transition:opacity 220ms ease,visibility 0s 220ms;
@@ -121,7 +128,7 @@ object WebMotionScript {
     var n=sideBackup.node;
     if(sideBackup.value)n.style.setProperty('background-color',sideBackup.value,sideBackup.priority);else n.style.removeProperty('background-color');
     n.removeAttribute('data-dsh-mobile-moving');isolate(n,false);
-    if(frame){frame.removeAttribute('data-dsh-left-closed');frame.removeAttribute('data-dsh-left-managed');}sideBackup=null;
+    if(frame){frame.removeAttribute('data-dsh-left-closed');frame.removeAttribute('data-dsh-left-managed');frame.removeAttribute('data-dsh-mobile-native-drawer');}sideBackup=null;
   }
   function sidebarToggle() {
     if(policy)return policy.leftToggle(side);
@@ -182,6 +189,18 @@ object WebMotionScript {
       else if(isOpen()||closing)closeWithMotion(toggle);else openLocal(toggle);
     }
   },true);
+  // Tapping the empty area beside an open drawer closes it. Native-drawer
+  // desktops paint their own mask, but that mask is a sibling React node the
+  // App cannot rely on: handle the tap here, at document capture, and stop it
+  // so the desktop toggle does not run a second time (which would reopen).
+  document.addEventListener('click',function (event) {
+    if (bypass || !nativeDrawer || !active || !mobile.matches || !frame || !side || !isOpen()) return;
+    if (!(event.target instanceof Element)) return;
+    if (event.target.closest('[data-dsh-mobile-sidebar]')) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    var control = sidebarToggle();
+    if (control) closeWithMotion(control); else settleClosed();
+  }, true);
 
   function bind() {
     var shape=window.__DSH_MOBILE_COMPAT__ && window.__DSH_MOBILE_COMPAT__.snapshot();
@@ -214,13 +233,18 @@ object WebMotionScript {
     side.style.setProperty('background-color','#1e2025','important');
     center.setAttribute('data-dsh-mobile-center','');
     // A native-drawer desktop already paints its own opaque [data-sidebar-mask];
-    // a second scrim only darkens the same pixels twice.
-    if(!nativeDrawer){
-      scrim=document.createElement('div'); scrim.className='dsh-mobile-sidebar-scrim';
-      scrim.setAttribute('aria-hidden','true');
-      scrim.addEventListener('click',function(){ closeWithMotion(sidebarToggle()); });
-      frame.appendChild(scrim);
-    }
+    // a second scrim only darkens the same pixels twice. Keep the scrim in that
+    // case, but transparent: tapping the empty area beside the drawer has to
+    // close it, and that tap must not reach the desktop mask behind (which would
+    // toggle the drawer a second time).
+    if(nativeDrawer)frame.setAttribute('data-dsh-mobile-native-drawer','');
+    scrim=document.createElement('div'); scrim.className='dsh-mobile-sidebar-scrim';
+    scrim.setAttribute('aria-hidden','true');
+    // On a native-drawer desktop the tap is handled once at document level
+    // (see below): the scrim there is a plain paint-free cover, and a listener
+    // bound to it would run a second time.
+    if(!nativeDrawer)scrim.addEventListener('click',function(){ closeWithMotion(sidebarToggle()); });
+    frame.appendChild(scrim);
     stateObserver=new MutationObserver(function(){
       if (!mobile.matches || !isOpen()) return;
       raiseAboveMask();
