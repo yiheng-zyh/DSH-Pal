@@ -2,7 +2,7 @@
 
 An independently developed Android companion for DeepSeek Harness: open your DSH web workspace on a phone or tablet, follow task progress in notifications, and manage remote connections.
 
-[中文](README.md) · [Connection guide (Chinese)](docs/connections.md) · [Deployment contract for AI (Chinese)](docs/AI-部署契约.md) · [Feature setup overview (Chinese)](docs/features-setup.md) · [Third-party notices](THIRD_PARTY_LICENSES.md)
+[中文](README.md) · [Connection guide (Chinese)](docs/connections.md) · [Deployment contract for AI (Chinese)](docs/AI-部署契约.md) · [Feature setup overview (Chinese)](docs/features-setup.md) · [Maintainer handoff (Chinese)](docs/PROJECT-HANDOFF.md) · [Third-party notices](THIRD_PARTY_LICENSES.md)
 
 > **Deploying with an AI agent?** Point it at the [deployment contract for AI (Chinese)](docs/AI-部署契约.md) first.
 > It lists every item to configure, defines what "done" means, and marks which steps require the device owner.

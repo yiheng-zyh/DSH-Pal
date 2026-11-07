@@ -96,6 +96,10 @@ window.__ModuleLoader__.load({
       noticeUpdating: "更新中…",
       noticeDone: "已更新，重启 DSH 后生效",
       noticeUpToDate: "已是最新版本",
+      // 本地开发装法（link: 指向源码库，无 remote）不是故障，不能说成"更新失败"。
+      noticeLocalOnly: "当前是本地开发装法，无需更新",
+      noticeCancel: "取消",
+      noticeClose: "知道了",
       switchTo: "改由这条公布",
       showHelp: "怎么办",
       hideHelp: "收起",
@@ -726,8 +730,14 @@ window.__ModuleLoader__.load({
           .then(function (outcome) {
             setApplying(false);
             var body = outcome.body || {};
+            // 本地开发装法（local-ahead / local-behind / no-remote）不是失败：
+            // 服务端已经给出如实的 note，照它显示即可，别把红字糊到用户脸上。
+            var localOnly =
+              body.code === "local-ahead" ||
+              body.code === "local-behind" ||
+              body.code === "no-remote";
             if (outcome.ok) {
-              setResult({ kind: "done", text: body.note || t("noticeDone") });
+              setResult({ kind: localOnly ? "info" : "done", text: body.note || t("noticeDone") });
             } else {
               setResult({
                 kind: "blocked",
@@ -757,10 +767,15 @@ window.__ModuleLoader__.load({
         );
       }
       if (result) {
+        // done / info 都是「正常结论」，只有 blocked（真的出错了）才用红字。
         children.push(
           React.createElement(
             "div",
-            { key: "result", style: result.kind === "done" ? S.noticeMeta : S.error },
+            {
+              key: "result",
+              style: result.kind === "blocked" ? S.error : S.noticeMeta,
+              "data-kind": result.kind,
+            },
             result.text,
           ),
         );
@@ -1212,7 +1227,16 @@ window.__ModuleLoader__.load({
           ? t("updateAvailable") + "：" + String(update.data.latest || "")
           : t("updateLatest");
       } else if (update.phase === "applied") {
-        updateText = update.result && update.result.changed === false ? t("updateNoChange") : t("updateDone");
+        // 本地开发装法（local-ahead/local-behind/no-remote）不是「没有变化」也不是「已更新」，
+        // 要说清它是哪一种，否则用户会以为更新功能坏了。
+        var appliedCode = update.result && update.result.code;
+        var appliedNote = update.result && update.result.note;
+        var isLocalOnly =
+          appliedCode === "local-ahead" ||
+          appliedCode === "local-behind" ||
+          appliedCode === "no-remote";
+        if (isLocalOnly && appliedNote) updateText = String(appliedNote);
+        else updateText = update.result && update.result.changed === false ? t("updateNoChange") : t("updateDone");
       } else if (update.phase === "blocked") {
         var blockedReason = (update.result && (update.result.error || update.result.code)) || "";
         updateText =

@@ -10,7 +10,8 @@
  * 它只做快进合并，本地有提交分叉时**直接失败**而不是偷偷合并。更新功能最怕的
  * 不是"更新失败"，而是"把用户没提交的代码吞掉"。所以再加两道闸：
  *   1. 插件目录与 remote-access 有未提交改动 → 直接拒绝，告诉用户哪些文件；
- *   2. 没有远程地址（本地开发仓）→ 拒绝并说明。
+ *   2. 没有远程地址（本地开发仓）→ 不再是「报错」，而是如实判定
+ *      本地版本是否已经 >= 远端最新（见 resolveLocalOnly）。
  *
  * 更新只改工作区文件，不重启任何进程：DSH 里的旧代码继续跑，用户重启 DSH 后才生效。
  * 这是刻意的 —— 在插件自己的请求里重启 DSH，请求会断在半路，用户看不到结果。
@@ -21,6 +22,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { checkUpdate, compareVersions, localVersion } from './update.js';
 
 const execute = promisify(execFile);
 
@@ -33,7 +35,9 @@ const SHARED_PATHS = ['tools/remote-access'];
 /** git 网络操作超时：国内拉 GitHub 可能慢，但不能无限等。 */
 const GIT_TIMEOUT_MS = 90000;
 
-/** 从 start 向上找含 .git 的目录，最多 8 层。 */
+/**
+ * 从 start 向上找含 .git 的目录，最多 8 层。
+ */
 export async function findRepositoryRoot(start = PLUGIN_ROOT) {
   let current = path.resolve(start);
   for (let i = 0; i < 8; i += 1) {
@@ -51,6 +55,63 @@ export async function findRepositoryRoot(start = PLUGIN_ROOT) {
   return null;
 }
 
+/**
+ * 没有远程地址时的结论：本地版本 vs 远端最新。
+ *
+ * 为什么不能直接报错：
+ * 作者本机是「link: 指向私有开发区」的装法（`tools/pal-channel-plugin` 就在源码库里），
+ * 那个库**故意不配 remote**（R-03：私有库只出不进，不允许 pull 回来覆盖）。
+ * 所以「点立即更新 → 红字 无法自动更新」对开发者是**必然且正常**的，
+ * 不是故障，更不是发布没弄好。如实说清楚，别让人去查错误的方向。
+ *
+ * 判定分三种，都是 200：本地开发装法不是"失败"。
+ *   - local-ahead：本地已等于或新于远端 → 根本不需要更新（作者本机的常态）；
+ *   - local-behind：本地比远端旧 → 需要手动同步（源码库落后于公开发布）；
+ *   - unknown：版本读不到 → 如实说不确定，给手动路径。
+ */
+async function resolveLocalOnly(repo, { checkUpdateImpl = checkUpdate } = {}) {
+  const local = await localVersion();
+  const check = await checkUpdateImpl({ local: local ?? undefined }).catch(() => ({ ok: false }));
+  const latest = check.ok ? check.latest : null;
+
+  const detail = {
+    repository: repo,
+    local,
+    latest,
+    localOnly: true,
+    // 手动路径永远给出：自动判定不确定时，用户至少知道下一步干什么。
+    manual: '源码在本地开发区时不需要走自动更新；要装公开发布版请按 README 从 GitHub 重新下载。',
+  };
+
+  if (!latest || !local) {
+    return done(200, {
+      ok: true,
+      code: 'no-remote',
+      changed: false,
+      ...detail,
+      note: '当前插件来自本地开发区（没有配置远程地址），无法自动更新；本地版本与远端版本未能比对，请按 README 处理。',
+    });
+  }
+
+  const diff = compareVersions(local, latest);
+  if (diff >= 0) {
+    return done(200, {
+      ok: true,
+      code: 'local-ahead',
+      changed: false,
+      ...detail,
+      note: `当前是本地开发装法：本地 ${local}，公开发布 ${latest}，本地已是最新或更新，无需更新。`,
+    });
+  }
+  return done(200, {
+    ok: true,
+    code: 'local-behind',
+    changed: false,
+    ...detail,
+    note: `本地开发区（${local}）比公开发布（${latest}）旧，自动更新不会去覆盖你的源码库；请先同步公开仓到本地。`,
+  });
+}
+
 /** 把仓库内的相对路径统一成 git 认的斜杠形式。 */
 function relative(repo, absolute) {
   return path.relative(repo, absolute).replace(/\\/g, '/');
@@ -59,9 +120,10 @@ function relative(repo, absolute) {
 /**
  * 应用更新。
  * @param options.executeImpl - 测试注入（替换 execFile）
+ * @param options.checkUpdateImpl - 测试注入（替换 checkUpdate，供无 remote 分支判定版本）
  * @returns {{status:number, body:object}}
  */
-export async function applyUpdate({ executeImpl = execute } = {}) {
+export async function applyUpdate({ executeImpl = execute, checkUpdateImpl = checkUpdate } = {}) {
   const repo = await findRepositoryRoot();
   if (!repo) {
     return done(409, {
@@ -71,19 +133,16 @@ export async function applyUpdate({ executeImpl = execute } = {}) {
     });
   }
 
-  // 有远程地址才谈得上"更新"；本地开发仓（无 remote）没有可拉取的源。
+  // 有远程地址才谈得上"更新"。没有 remote 时不再当错误处理 —— 作者本机就是
+  // link: 指向私有开发区（故意不配 remote，见 R-03），那是正常装法。
   let remote;
   try {
     remote = (await executeImpl('git', ['-C', repo, 'remote', 'get-url', 'origin'])).stdout.trim();
   } catch {
-    return done(409, {
-      ok: false,
-      code: 'no-remote',
-      error: '这个仓库没有配置远程地址，无法自动更新。',
-    });
+    return resolveLocalOnly(repo, { checkUpdateImpl });
   }
   if (!remote) {
-    return done(409, { ok: false, code: 'no-remote', error: '这个仓库没有配置远程地址，无法自动更新。' });
+    return resolveLocalOnly(repo, { checkUpdateImpl });
   }
 
   // 只看与插件相关的路径：App 代码的本地改动不该阻止插件更新。

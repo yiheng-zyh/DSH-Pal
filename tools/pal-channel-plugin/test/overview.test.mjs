@@ -336,7 +336,7 @@ test('版本比较：分段数字比较，兼容 v 前缀与预发布后缀', ()
   assert.equal(compareVersions('0.1.0-alpha.2', '0.1.0') < 0, true);
 });
 
-test('更新检查：第一个源成功就用它，且不把读失败当成旧版本', async () => {
+test('更新检查：并发打所有版本源，用冠军，公告跟着冠军的镜像走', async () => {
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(url);
@@ -350,11 +350,43 @@ test('更新检查：第一个源成功就用它，且不把读失败当成旧�
   assert.equal(result.ok, true);
   assert.equal(result.latest, '0.2.0');
   assert.equal(result.updateAvailable, true);
-  // 第一次是版本源，第二次是公告源；版本源成功就不该再去打 GitHub API。
-  assert.equal(calls.length, 2, `calls=${calls.join(',')}`);
-  assert.match(calls[0], /package\.json/);
-  assert.match(calls[1], /CHANGELOG\.md/);
+  // 三个镜像的 package.json 是并发打出去的（顺序降级会让不通的源卡满超时），
+  // 之后只额外取一次 CHANGELOG，且必须与冠军同一个镜像前缀。
+  const versionCalls = calls.filter((url) => url.endsWith('/package.json'));
+  assert.equal(versionCalls.length, 3, `calls=${calls.join(',')}`);
+  const changelogCalls = calls.filter((url) => url.endsWith('/CHANGELOG.md'));
+  assert.equal(changelogCalls.length, 1, `calls=${calls.join(',')}`);
+  assert.equal(
+    changelogCalls[0].replace(/\/CHANGELOG\.md$/, ''),
+    versionCalls[0].replace(/\/package\.json$/, ''),
+    '公告必须来自冠军镜像，否则会出现「版本从 A 源拿、公告从 B 源拿」的半套更新',
+  );
   assert.deepEqual(result.notes, ['【新增】', '· 新功能 A']);
+});
+
+test('更新检查：App 的 Release tag 不许当插件版本（否则永远误报有新版本）', async () => {
+  const seen = [];
+  // 造一个会立刻回 App 发布号的源：修复前它会被当成 latest，导致插件永远"可更新"。
+  const fetchImpl = async (url) => {
+    seen.push(url);
+    if (url.includes('api.github.com')) {
+      return { ok: true, json: async () => ({ tag_name: 'v0.1.1' }), text: async () => '' };
+    }
+    return {
+      ok: true,
+      json: async () => ({ version: '0.1.0' }),
+      text: async () => '## 0.1.0 - 2026-11-05\n\n- x\n',
+    };
+  };
+  const result = await checkUpdate({ fetchImpl, local: '0.1.0' });
+  assert.equal(result.ok, true);
+  assert.equal(result.latest, '0.1.0', 'latest 必须来自插件 package.json，不是 Release tag');
+  assert.equal(result.updateAvailable, false);
+  assert.equal(
+    seen.some((url) => url.includes('api.github.com')),
+    false,
+    '插件版本判定不该再去问 GitHub Releases（那是 App 的版本号）',
+  );
 });
 
 test('更新公告：解析 CHANGELOG 里目标版本的段落，找不到就退回最新', () => {
@@ -451,15 +483,46 @@ test('应用更新：有未提交改动时拒绝，一个文件都不动', async
   assert.ok(result.body.files.some((f) => f.includes('client.js')));
 });
 
-test('应用更新：本地开发仓没有 remote 时如实说明，不尝试拉取', async () => {
+test('应用更新：本地开发仓没有 remote 时不报错，而是按版本判定「无需更新」', async () => {
   const executeImpl = async (command, args) => {
     const full = args.join(' ');
     if (full.includes('remote get-url')) throw new Error('No such remote');
+    throw new Error('不该走到这里：没有 remote 就不能尝试 pull');
+  };
+  // 本机真实装法：私有开发区没有 remote，本地 0.1.0 == 公开发布 0.1.0。
+  const checkUpdateImpl = async ({ local }) => ({ ok: true, local, latest: local, updateAvailable: false });
+  const result = await applyUpdate({ executeImpl, checkUpdateImpl });
+  assert.equal(result.status, 200, '本地开发装法不是故障，不该回 409 红字');
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.changed, false);
+  assert.equal(result.body.code, 'local-ahead');
+  assert.match(result.body.note, /无需更新/);
+});
+
+test('应用更新：本地开发区比公开发布旧时，如实说「先同步公开仓」而不是假装更新成功', async () => {
+  const executeImpl = async (command, args) => {
+    const full = args.join(' ');
+    if (full.includes('remote get-url')) return { stdout: '' };
     throw new Error('不该走到这里');
   };
-  const result = await applyUpdate({ executeImpl });
-  assert.equal(result.status, 409);
+  const checkUpdateImpl = async ({ local }) => ({ ok: true, local, latest: '9.9.9', updateAvailable: true });
+  const result = await applyUpdate({ executeImpl, checkUpdateImpl });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.changed, false, '绝不能假装更新成功');
+  assert.equal(result.body.code, 'local-behind');
+  assert.match(result.body.note, /同步公开仓/);
+  assert.equal(result.body.latest, '9.9.9');
+});
+
+test('应用更新：没有 remote 且版本比对也失败时，说实话而不是编造结论', async () => {
+  const executeImpl = async () => {
+    throw new Error('No such remote');
+  };
+  const checkUpdateImpl = async () => ({ ok: false });
+  const result = await applyUpdate({ executeImpl, checkUpdateImpl });
+  assert.equal(result.status, 200);
   assert.equal(result.body.code, 'no-remote');
+  assert.match(result.body.note, /未能比对/);
 });
 
 test('更新检查：所有源都失败时如实报失败，不编造 latest', async () => {

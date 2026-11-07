@@ -6,7 +6,7 @@ DSH Pal 是一个个人开发的 Android 远程伴侣：在手机和平板里打
 
 它需要电脑端运行 DSH 与远程访问插件，不在手机本地运行模型。项目仍在迭代，欢迎附带复现步骤和脱敏日志报告问题。
 
-[English](README.en.md) · [**配置核对清单（用户版）**](docs/用户核对清单.md) · [连接与两端配置](docs/connections.md) · [**给 AI 的部署契约**](docs/AI-部署契约.md) · [App 功能启用总览](docs/features-setup.md) · [第三方许可](THIRD_PARTY_LICENSES.md)
+[English](README.en.md) · [**配置核对清单（用户版）**](docs/用户核对清单.md) · [连接与两端配置](docs/connections.md) · [**给 AI 的部署契约**](docs/AI-部署契约.md) · [App 功能启用总览](docs/features-setup.md) · [待推送改动](docs/待推送改动.md) · [项目总交接 / Issue 修复手册](docs/PROJECT-HANDOFF.md) · [第三方许可](THIRD_PARTY_LICENSES.md)
 
 > ### 📋 第一次配？先看 [**配置核对清单（用户版）**](docs/用户核对清单.md)
 >
@@ -98,7 +98,7 @@ Tailscale 需要电脑端登录（安装：<https://tailscale.com/docs/install/w
 
 这些操作在 USB 开发通道下完成了页面级验证。**最近一次正常正式包公网加载复查仍有超时和探测异常，没有宣称通过。** 历史有 Tailscale 端到端成功记录，但当前网络仍可能经过波动的中继。
 
-收尾另发现平板熄屏启动时前台服务超时退出，尚待定位。已知待办还包括：健康探测地址可能与业务地址不一致；不同插件组合仍需回归；WireGuard 暂无可用服务端进行真实网络验收；平板经典通知的完整展开、短横屏大键盘和重负载帧率仍有验证空缺。完整待办以本页与 `docs/` 下的技术文档为准。
+收尾另发现平板熄屏启动时前台服务超时退出，尚待定位。已知待办还包括：健康探测地址可能与业务地址不一致；不同插件组合仍需回归；WireGuard 暂无可用服务端进行真实网络验收；平板经典通知的完整展开、短横屏大键盘和重负载帧率仍有验证空缺。详情见[总交接](docs/PROJECT-HANDOFF.md#9-待办与已知限制不要在新对话中丢失)。
 
 ## 实现方式
 
@@ -157,6 +157,7 @@ App 没有内置广告或分析 SDK；所用网络方案仍可能连接 Tailscal
 
 请提供 App版本、Android/ROM/WebView版本、手机或平板/屏幕方向、连接类型、相关插件、复现步骤、期望与实际、脱敏日志或录屏。**不要上传完整配对链接、Cookie、Tailscale授权链接、WireGuard私钥或私人会话。**
 
+维护者接手入口：先读 **[项目总交接](docs/PROJECT-HANDOFF.md)**（架构、红线、验收矩阵都在这里）。
 需要 AI 视角的部署清单，看 [AI 部署契约](docs/AI-部署契约.md)。
 
 - 项目主页：<https://github.com/yiheng-zyh/DSH-Pal>

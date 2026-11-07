@@ -7,10 +7,14 @@
  * 只会看到**整个通道面板消失**——这比旧版本更糟。所以这里只把事实摆出来：
  * 本地版本、远端最新版本、有没有新版、去哪里更新。
  *
- * 版本源按「国内可达性」排序，逐个降级：
- *   1. jsDelivr CDN 读公开仓的 package.json（国内基本可达，无 API 限流）；
- *   2. GitHub Releases API（本机可直连 api.github.com，但国内用户常不通）。
- * 两条都不通时如实报「检查失败」，绝不把旧数据当成结论。
+ * 版本源：三个镜像**并发**去读公开仓里的插件 `package.json`，谁先回谁赢
+ * （jsDelivr / raw.githubusercontent / gh-proxy）。全部不通时如实报
+ * 「检查失败」，绝不把旧数据当成结论。
+ *
+ * ⚠️ 版本号只有一个真相源：**插件自己的 `package.json`**。
+ * 绝不能拿 `api.github.com/.../releases/latest` 的 tag —— 那是 **App** 的发布号
+ * （`v0.1.1`），和插件版本（`0.1.0`）是两套独立编号。混用的后果是插件永远显示
+ * 「有新版本」，用户点更新后版本号纹丝不动，看起来像更新功能坏了（2026-11-07 修）。
  *
  * @module dsh-pal-channel/update
  */
@@ -24,12 +28,25 @@ const PACKAGE_FILE = fileURLToPath(new URL('../package.json', import.meta.url));
 const RELEASE_URL = 'https://github.com/yiheng-zyh/DSH-Pal/releases/latest';
 
 /**
- * 更新公告的来源：仓库里的 CHANGELOG.md，经 jsDelivr 取。
- * 不用 GitHub Release API 的 body 当公告，因为国内用户常打不开 api.github.com；
- * CHANGELOG 跟着仓库走，jsDelivr 在国内基本可达，且不受 API 限流影响。
+ * 插件在公开仓里的目录，按「国内可达性」顺序列出镜像前缀。
+ *
+ * 每个前缀下面必须同时有 `package.json`（版本）和 `CHANGELOG.md`（公告），
+ * 所以版本和公告共用一个源列表 —— 否则会出现「版本从 A 源拿、公告从 B 源拿」
+ * 的两套降级逻辑，改了源只改一边，表现为「有新版但公告永远空白」。
+ *
+ * 实测（2026-11-07，本机）：
+ *   cdn.jsdelivr.net          8 秒超时（本机不可用，但不能删——其它地区可达）
+ *   raw.githubusercontent.com 715ms
+ *   gh-proxy.com 镜像         2.9s
  */
-const CHANGELOG_URL =
-  'https://cdn.jsdelivr.net/gh/yiheng-zyh/DSH-Pal@main/tools/pal-channel-plugin/CHANGELOG.md';
+const MIRRORS = [
+  { id: 'jsdelivr', base: 'https://cdn.jsdelivr.net/gh/yiheng-zyh/DSH-Pal@main/tools/pal-channel-plugin' },
+  { id: 'raw', base: 'https://raw.githubusercontent.com/yiheng-zyh/DSH-Pal/main/tools/pal-channel-plugin' },
+  {
+    id: 'gh-proxy',
+    base: 'https://gh-proxy.com/https://raw.githubusercontent.com/yiheng-zyh/DSH-Pal/main/tools/pal-channel-plugin',
+  },
+];
 
 /** 公告最多展示多少行：面板是一个设置区块，不是发布页。 */
 const NOTES_MAX_LINES = 40;
@@ -83,39 +100,42 @@ export function compareVersions(a, b) {
   return left.pre.localeCompare(right.pre);
 }
 
-/** 版本源：每个源负责把它的响应体变成版本号字符串，不合法返回 null。 */
-const SOURCES = [
-  {
-    id: 'jsdelivr',
-    url: 'https://cdn.jsdelivr.net/gh/yiheng-zyh/DSH-Pal@main/tools/pal-channel-plugin/package.json',
-    pick: (body) => (typeof body?.version === 'string' ? body.version : null),
-  },
-  {
-    id: 'github',
-    url: 'https://api.github.com/repos/yiheng-zyh/DSH-Pal/releases/latest',
-    pick: (body) => {
-      const tag = typeof body?.tag_name === 'string' ? body.tag_name : '';
-      return tag ? tag.replace(/^v/i, '') : null;
-    },
-  },
-];
+/**
+ * 版本源：每个源负责把它的响应体变成版本号字符串，不合法返回 null。
+ *
+ * **必须只读插件自己的 `package.json`。**
+ * 曾经把 GitHub Releases 的 tag 当成插件版本 —— 那是 **App** 的发布号（`v0.1.1`），
+ * 和插件版本（`package.json` 的 `0.1.0`）是两套独立编号。
+ * 结果：插件永远显示"有新版本"，用户点更新后版本号纹丝不动，看起来像更新坏了。
+ * 2026-11-07 修：App 的 Release 号不再参与插件版本判定，只用于「打开发布页」。
+ */
+const SOURCES = MIRRORS.map((mirror) => ({
+  id: mirror.id,
+  base: mirror.base,
+  url: `${mirror.base}/package.json`,
+  pick: (body) => (typeof body?.version === 'string' ? body.version : null),
+}));
 
 /** 版本号粗校验：至少 x.y.z 三段数字。 */
 const VERSION_PATTERN = /^\d+\.\d+\.\d+/;
 
-/** 拉取 CHANGELOG 并解析出目标版本的公告；任何失败都降级成空公告，不影响版本结论。 */
-async function fetchChangelog(fetchImpl, version, timeoutMs) {
-  try {
-    const response = await fetchImpl(CHANGELOG_URL, {
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { accept: 'text/plain', 'user-agent': 'dsh-pal-channel' },
-    });
-    if (!response.ok) return { lines: [] };
-    const text = await response.text();
-    return { lines: parseChangelog(text, version) };
-  } catch {
-    return { lines: [] };
+/** 拉取某个镜像下的 CHANGELOG 并解析出目标版本的公告；失败降级成空公告。 */
+async function fetchChangelog(fetchImpl, base, version, timeoutMs) {
+  for (const file of ['CHANGELOG.md']) {
+    try {
+      const response = await fetchImpl(`${base}/${file}`, {
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { accept: 'text/plain', 'user-agent': 'dsh-pal-channel' },
+      });
+      if (!response.ok) continue;
+      const text = await response.text();
+      const lines = parseChangelog(text, version);
+      if (lines.length > 0) return { lines };
+    } catch {
+      // 换下一个文件（目前只有一个，保留循环是为了以后加 README 片段）。
+    }
   }
+  return { lines: [] };
 }
 
 /**
@@ -164,6 +184,12 @@ export function parseChangelog(markdown, version) {
 
 /**
  * 检查更新。
+ *
+ * **三个源并发打，谁先回谁赢**，输掉的那几个立刻 abort。
+ * 曾经是顺序降级（先 jsDelivr，超时才下一个），实测在 jsDelivr 不通的网络上
+ * 每次检查都要干等满 6 秒超时才降级 —— 心跳每 10 分钟来一次，面板一直转圈。
+ * 并发之后最坏情况仍是 6 秒，但常见情况等于最快的那个源（本机 0.7 秒）。
+ *
  * @param options.fetchImpl - 测试注入；默认全局 fetch
  * @param options.local - 覆盖本地版本（测试用）
  * @param options.timeoutMs - 单个源超时
@@ -171,44 +197,59 @@ export function parseChangelog(markdown, version) {
 export async function checkUpdate({ fetchImpl = fetch, local, timeoutMs = TIMEOUT_MS } = {}) {
   const current = local ?? (await localVersion());
   const failures = [];
-  for (const source of SOURCES) {
-    try {
-      const response = await fetchImpl(source.url, {
-        signal: AbortSignal.timeout(timeoutMs),
-        headers: { accept: 'application/json', 'user-agent': 'dsh-pal-channel' },
-      });
-      if (!response.ok) {
-        failures.push(`${source.id} HTTP ${response.status}`);
-        continue;
+  const controllers = [];
+
+  /** 单个源：成功返回 { source, latest }，失败抛出（原因记进 failures）。 */
+  const attempt = (source) => {
+    const controller = new AbortController();
+    controllers.push(controller);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return (async () => {
+      try {
+        const response = await fetchImpl(source.url, {
+          signal: controller.signal,
+          headers: { accept: 'application/json', 'user-agent': 'dsh-pal-channel' },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const latest = source.pick(await response.json());
+        if (typeof latest !== 'string' || !VERSION_PATTERN.test(latest)) {
+          throw new Error('版本号不合法');
+        }
+        return { source, latest };
+      } catch (error) {
+        failures.push(`${source.id} ${String(error?.message ?? error).slice(0, 80)}`);
+        throw error;
+      } finally {
+        clearTimeout(timer);
       }
-      const latest = source.pick(await response.json());
-      if (typeof latest !== 'string' || !VERSION_PATTERN.test(latest)) {
-        failures.push(`${source.id} 版本号不合法`);
-        continue;
-      }
-      const notes = await fetchChangelog(fetchImpl, latest, timeoutMs);
-      return {
-        ok: true,
-        local: current,
-        latest,
-        updateAvailable: current === null ? null : compareVersions(latest, current) > 0,
-        source: source.id,
-        // 公告取不到不影响「有没有新版」的结论：分开报，界面可以只显示版本。
-        notes: notes.lines,
-        notesAvailable: notes.lines.length > 0,
-        releaseUrl: RELEASE_URL,
-        checkedAt: new Date().toISOString(),
-      };
-    } catch (error) {
-      // 网络不可达、超时、JSON 解析失败都只算这个源失败，继续下一个。
-      failures.push(`${source.id} ${String(error?.message ?? error).slice(0, 80)}`);
-    }
-  }
-  return {
-    ok: false,
-    local: current,
-    error: failures.join('；') || '没有可用的版本源',
-    releaseUrl: RELEASE_URL,
-    checkedAt: new Date().toISOString(),
+    })();
   };
+
+  try {
+    const winner = await Promise.any(SOURCES.map(attempt));
+    // 冠军已出，其余请求没有价值，立刻断掉省电省流量。
+    controllers.forEach((controller) => controller.abort());
+    const notes = await fetchChangelog(fetchImpl, winner.source.base, winner.latest, timeoutMs);
+    return {
+      ok: true,
+      local: current,
+      latest: winner.latest,
+      updateAvailable: current === null ? null : compareVersions(winner.latest, current) > 0,
+      source: winner.source.id,
+      // 公告取不到不影响「有没有新版」的结论：分开报，界面可以只显示版本。
+      notes: notes.lines,
+      notesAvailable: notes.lines.length > 0,
+      releaseUrl: RELEASE_URL,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch {
+    // Promise.any 在所有源都失败时 reject；真实原因已经记进 failures。
+    return {
+      ok: false,
+      local: current,
+      error: failures.join('；') || '没有可用的版本源',
+      releaseUrl: RELEASE_URL,
+      checkedAt: new Date().toISOString(),
+    };
+  }
 }

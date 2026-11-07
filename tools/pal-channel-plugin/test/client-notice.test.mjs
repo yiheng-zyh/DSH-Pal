@@ -97,6 +97,44 @@ test('换了一个新版本会重新提醒（不能被上一次的稍后永久�
   assert.match(JSON.stringify(element), /0\.3\.0/);
 });
 
+test('本地开发装法的结论不能画成红字（那是正常状态，不是更新失败）', async () => {
+  // 2026-11-07 用户截图里的红字就来自这里：本地开发区没有 remote，
+  // applyUpdate 返回 code=no-remote，旧代码一律按 blocked 用 S.error 渲染。
+  const source = await fs.readFile(new URL('../lib/client.js', import.meta.url), 'utf8');
+  assert.match(
+    source,
+    /local-ahead[\s\S]{0,400}?local-behind[\s\S]{0,400}?no-remote/,
+    '三种本地开发装法结论必须都被识别',
+  );
+  assert.match(
+    source,
+    /kind:\s*localOnly\s*\?\s*"info"\s*:\s*"done"/,
+    '本地装法要落到 info（中性样式），不能落到 blocked（红字）',
+  );
+  // 红字只留给 blocked：这是「真的出错了」的唯一信号。
+  assert.match(
+    source,
+    /result\.kind === "blocked"\s*\?\s*S\.error\s*:\s*S\.noticeMeta/,
+    '只有 blocked 才用错误样式',
+  );
+});
+
+test('插件版本只认自己的 package.json，绝不拿 App 的 Release tag 当版本', async () => {
+  const raw = await fs.readFile(new URL('../lib/update.js', import.meta.url), 'utf8');
+  // 注释里解释历史教训是必要的（否则下一个人还会踩）；要守的是**代码**里不许再问 Releases。
+  const code = raw
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|\s)\/\/.*$/gm, '$1');
+  assert.equal(
+    /api\.github\.com/.test(code),
+    false,
+    '代码里不能再请求 GitHub Releases —— 那是 App 的版本号，会让插件永远误报可更新',
+  );
+  assert.equal(/tag_name/.test(code), false, '代码里不能再从 Release tag 推断插件版本');
+  // 发布页地址仍然保留，只是用途变成「打开发布页」，不再参与版本判定。
+  assert.match(code, /RELEASE_URL\s*=\s*'https:\/\/github\.com\/yiheng-zyh\/DSH-Pal\/releases\/latest'/);
+});
+
 test('面板里的直连开关区块仍然注册在 settings.section，提醒层单独挂 shell.overlay', () => {
   const registered = [];
   const react = makeReact([]);
