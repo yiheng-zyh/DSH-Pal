@@ -336,6 +336,49 @@ test('版本比较：分段数字比较，兼容 v 前缀与预发布后缀', ()
   assert.equal(compareVersions('0.1.0-alpha.2', '0.1.0') < 0, true);
 });
 
+test('版本比较：带前缀的版本号也要正确（否则更新判定静默失效）', () => {
+  // 2026-11-07 实测发现的真 bug：旧实现按第一个 '-' 切分，
+  // `pal-plugin-0.1.10` 的 core 变成 `pal`（解析成 0）、pre 变成 `plugin-0.1.10`，
+  // 于是 0.1.10 被判成**比 0.1.9 更旧**。加前缀后更新判定会整体失效且不报错。
+  assert.equal(compareVersions('pal-plugin-0.1.10', 'pal-plugin-0.1.9') > 0, true);
+  assert.equal(compareVersions('pal-plugin-0.2.0', 'pal-plugin-0.1.99') > 0, true);
+  assert.equal(compareVersions('pal-plugin-0.1.0', 'pal-plugin-0.1.0'), 0);
+  // 混比：带前缀与不带前缀只要数字一样就是同一个版本（迁移期必须成立）。
+  assert.equal(compareVersions('pal-plugin-0.1.0', '0.1.0'), 0);
+  // 预发布语义不能被前缀破坏。
+  assert.equal(compareVersions('pal-plugin-0.1.0-alpha.2', 'pal-plugin-0.1.0') < 0, true);
+});
+
+test('版本号校验正则必须接受带前缀的版本（否则所有版本源都判不合法）', async () => {
+  const source = await fs.readFile(new URL('../lib/update.js', import.meta.url), 'utf8');
+  const literal = /const VERSION_PATTERN = \/(.+)\/;/.exec(source);
+  assert.ok(literal, '必须能定位到 VERSION_PATTERN');
+  const pattern = new RegExp(literal[1]);
+  assert.equal(pattern.test('pal-plugin-0.1.0'), true, '带前缀的版本号必须合法');
+  assert.equal(pattern.test('0.1.0'), true, '普通版本号仍然合法');
+  assert.equal(pattern.test('v1.2.3'), true);
+  assert.equal(pattern.test('abc'), false, '非版本号仍要被拒绝');
+  assert.equal(pattern.test('1.2'), false, '缺第三段仍要被拒绝');
+});
+
+test('插件版本号必须是合法 semver：pnpm 会直接拒绝带前缀的 version', async () => {
+  // 实测：`"version": "pal-plugin-0.1.0"` 会得到
+  //   [ERR_PNPM_BAD_PACKAGE_JSON] Invalid version: "pal-plugin-0.1.0"
+  // 插件装不上 = 比版本号难看严重得多。所以「区分插件/App」只能靠版本段位、
+  // name 与 displayName，不能用 version 字段加前缀。
+  const manifest = JSON.parse(
+    await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  );
+  assert.match(
+    manifest.version,
+    /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/,
+    'version 必须是标准 semver（前缀会让 pnpm 拒绝安装）',
+  );
+  // 与 App 的 0.1.x 区分开：插件的次版本号必须 >= 2。
+  const [, minor] = manifest.version.split('.');
+  assert.ok(Number(minor) >= 2, `插件版本 ${manifest.version} 要与 App 的 0.1.x 区分开`);
+});
+
 test('更新检查：并发打所有版本源，用冠军，公告跟着冠军的镜像走', async () => {
   const calls = [];
   const fetchImpl = async (url) => {

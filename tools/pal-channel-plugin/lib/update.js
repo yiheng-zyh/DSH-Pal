@@ -65,7 +65,16 @@ export async function localVersion() {
 }
 
 /**
- * 比较两个 x.y.z 版本（允许 `v` 前缀与 `-alpha.1` 这类预发布后缀）。
+ * 比较两个版本号。支持三种形态：
+ *   1. 纯 semver：`1.2.3`、`v1.2.3`、`1.2.3-alpha.7`
+ *   2. **带前缀**：`pal-plugin-1.2.3`（2026-11-07 起插件用这套编号，
+ *      前缀把它和 App 的版本号彻底区分开，见 CHANGELOG）
+ *   3. 两者混比：`0.1.0` vs `pal-plugin-0.1.0`
+ *
+ * ⚠️ 解析必须用「找数字串」而不是「按 `-` 切分」：
+ * 旧实现按第一个 `-` 切，`pal-plugin-0.1.10` 会变成 core=`pal`（解析成 0）、
+ * pre=`plugin-0.1.10`，于是 `0.1.10` 被判成**比 0.1.9 更旧**——版本号一加前缀
+ * 更新判定就整体失效，而且是静默失效（界面照常显示，结论是错的）。
  *
  * 预发布按 semver 规则处理：`0.1.0-alpha.2 < 0.1.0`。这条不能省 ——
  * 项目里真实存在 `0.1.0-alpha.7` 与 `0.1.0` 两种版本，判错会把「已发布正式版」
@@ -76,16 +85,19 @@ export async function localVersion() {
 export function compareVersions(a, b) {
   const parse = (value) => {
     const text = String(value ?? '').trim().replace(/^v/i, '');
-    const dash = text.indexOf('-');
-    const core = dash >= 0 ? text.slice(0, dash) : text;
-    const pre = dash >= 0 ? text.slice(dash + 1) : '';
-    return {
-      parts: core.split('.').map((part) => {
-        const n = Number.parseInt(part, 10);
-        return Number.isFinite(n) ? n : 0;
-      }),
-      pre,
-    };
+    // 抓第一段 `数字.数字[.数字…]`；前缀（pal-plugin-）自然被跳过。
+    const match = /(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$/.exec(text);
+    if (!match) return { parts: [0, 0, 0], pre: '' };
+    const parts = [match[1], match[2], match[3]].map((raw) => {
+      const n = Number.parseInt(raw ?? '0', 10);
+      return Number.isFinite(n) ? n : 0;
+    });
+    // 主版本之后剩下的部分：`-alpha.7` 去掉前导 `-`；`+build` 这类构建元数据忽略。
+    let rest = String(match[4] ?? '');
+    const plus = rest.indexOf('+');
+    if (plus >= 0) rest = rest.slice(0, plus);
+    const pre = rest.replace(/^-/, '');
+    return { parts, pre };
   };
   const left = parse(a);
   const right = parse(b);
@@ -116,8 +128,13 @@ const SOURCES = MIRRORS.map((mirror) => ({
   pick: (body) => (typeof body?.version === 'string' ? body.version : null),
 }));
 
-/** 版本号粗校验：至少 x.y.z 三段数字。 */
-const VERSION_PATTERN = /^\d+\.\d+\.\d+/;
+/**
+ * 版本号粗校验：允许可选前缀 + 至少 x.y.z 三段数字。
+ *
+ * 不能写成 `/^\d+\.\d+\.\d+/` —— 那样 `pal-plugin-0.1.0` 会被判成「版本号不合法」，
+ * 所有版本源全部失败，更新检查直接瘫痪（而且表现为「检查失败」，很难联想到前缀）。
+ */
+const VERSION_PATTERN = /^(?:[A-Za-z][\w.-]*-)?v?\d+\.\d+\.\d+/;
 
 /** 拉取某个镜像下的 CHANGELOG 并解析出目标版本的公告；失败降级成空公告。 */
 async function fetchChangelog(fetchImpl, base, version, timeoutMs) {

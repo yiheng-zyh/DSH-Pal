@@ -1,8 +1,9 @@
 {
   "name": "dsh-pal-channel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "在 DSH 界面里一键切换公网入口：国内 frp 与 Cloudflare 隧道二选一。只改 remote-web-ui 的配置，不 import 也不 patch 它的代码，上游更新冲不掉本功能。",
   "icon": "icon.svg",
+  "displayName": "DSH Pal 通道插件",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
