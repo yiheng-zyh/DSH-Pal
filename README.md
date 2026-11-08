@@ -82,7 +82,15 @@ node tools/deploy-status.mjs
 
 **装完 App 后**：每个功能默认是开还是关、要什么权限，见 [App 功能启用总览](docs/features-setup.md)。通知、悬浮窗等权限不给，功能会静默失效。
 
-**想在网页里一键切换公网入口**（国内 frp ⇄ Cloudflare）：装 [公网通道切换插件](tools/pal-channel-plugin/README.md)。它只改远控插件的配置、不改它的代码，上游更新不会冲掉。装完后 DSH 设置里会出现「公网通道」区块。
+**想在网页里一键切换公网入口**（国内 frp ⇄ Cloudflare）：装 [PAL 通道插件](tools/pal-channel-plugin/README.md)。它只改远控插件的配置、不改它的代码，上游更新不会冲掉。装完后 DSH 设置的左侧导航里会出现 **「PAL 网关管理」** 入口。
+
+> ⚠️ **装这个插件有三步，漏一步就看不到入口**（不是插件坏了）：
+> 1. **先装依赖** `cd tools/remote-access && npm ci --ignore-scripts --no-audit --no-fund`
+>    —— 不装会报 `Cannot find package 'yaml'`，DSH 重启后设置里什么都没有；
+> 2. profile 的 `package.json` 里加 `link:` 依赖（指向**你自己**的克隆路径，不是别人的）；
+> 3. 把它加进 profile 的 `dsh.profile.bundles` 数组，否则包在 `node_modules` 里但**不会被加载**。
+>
+> 完整步骤与排查表见插件 README 的「三、安装」。装完请用 `node -e "import('./tools/pal-channel-plugin/lib/index.js')"` 自检，能打印 `name= pal-channel` 才算装好。
 
 **登录 Tailscale 之后不必再扫二维码**：电脑端装 `pc-plugin/autopair.mjs` 即可，说明见 [pc-plugin/README](pc-plugin/README.md)。它确认来源是你自己 tailnet 的设备后，从回环代签一次配对令牌；`/pair-accept` 仍是同一个端点、同一套校验。
 
