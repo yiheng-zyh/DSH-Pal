@@ -49,6 +49,18 @@ fun DshWebView(
     val loadScope=rememberCoroutineScope()
     val capabilities = rememberWebCapabilities()
     val pageReadyScript = remember { context.assets.open("page-ready.js").bufferedReader().use { it.readText() } }
+    // 旧 WebView JS 兼容层（issue #1：鸿蒙卓易通 Chromium < 116 缺
+    // Promise.withResolvers / AbortSignal.any，页面 boot 直接 TypeError）。
+    // 必须排在 document-start 串联的最前面：晚于页面内联脚本就救不回来。
+    // 缺失才补、幂等、无 DOM 依赖；读不到时降级为不注入，绝不 crash。
+    val polyfillScript = remember {
+        runCatching { context.assets.open("webview-polyfill.js").bufferedReader().use { it.readText() } }
+            .getOrElse {
+                com.dsh.mobile.core.RunLog.warn("Inject", "webview-polyfill failed ${it.javaClass.simpleName}")
+                com.dsh.mobile.core.DiagFacts.recordInjectFailed("webview-polyfill", it.javaClass.simpleName)
+                ""
+            }
+    }
     // 离线屏蔽必须在 document-start 注入：DSH 页面 boot 时就建立 WebSocket 与
     // 首轮 fetch，晚一步注入就抓不到构造函数（与桥接脚本同一个理由）。
     val offlineGuardScript = remember { context.assets.open("offline-guard.js").bufferedReader().use { it.readText() } }
@@ -228,7 +240,7 @@ fun DshWebView(
         val scriptHandler = runCatching {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                WebViewport.script() + "\n" + offlineGuardScript + "\n" + BridgeScript.build(forwardEvents = true, forwardState = true) + "\n" + com.dsh.mobile.bridge.WebMotionScript.build() + "\n" + com.dsh.mobile.bridge.WebLayoutScript.build(context) + "\n" + fileScript + "\n" + WebAppearance.script() + "\n" + probeSource,
+                polyfillScript + "\n" + WebViewport.script() + "\n" + offlineGuardScript + "\n" + BridgeScript.build(forwardEvents = true, forwardState = true) + "\n" + com.dsh.mobile.bridge.WebMotionScript.build() + "\n" + com.dsh.mobile.bridge.WebLayoutScript.build(context) + "\n" + fileScript + "\n" + WebAppearance.script() + "\n" + probeSource,
                 setOf("*"),
             )
         }.onSuccess {
@@ -274,6 +286,9 @@ fun DshWebView(
                 // the constructor wrapper is in place before the page boots its
                 // socket. The script is idempotent.
                 view?.let { bridge.install(it) }
+                // polyfill 同样双保险，且排在最前：卓易通（issue #1）实测
+                // document-start 整条静默失效，只有这条路能赶在页面内联脚本前。
+                if (polyfillScript.isNotBlank()) injectJs(view, polyfillScript, "webview-polyfill")
                 // 双保险注入（与桥接同一理由：部分 HyperOS WebView 上
                 // addDocumentStartJavaScript 静默失效）。offline-guard 自身幂等。
                 injectJs(view, offlineGuardScript + ";window.__DSH_SET_OFFLINE__ && window.__DSH_SET_OFFLINE__(false)", "offline-guard")
@@ -297,6 +312,9 @@ fun DshWebView(
                 com.dsh.mobile.core.NavStages.machine.reach(com.dsh.mobile.core.NavStage.SCRIPT_EVAL, "progress=${view.progress}")
                 // Last resort for pages whose boot code runs after load.
                 bridge.install(view)
+                // polyfill 兜底（与桥接同一理由）：首屏 boot 若已失败，前端的重连
+                // 重试循环还会反复调 AbortSignal.any——此时补上，后续重试即可恢复。
+                if (polyfillScript.isNotBlank()) injectJs(view, polyfillScript, "webview-polyfill")
                 view.evaluateJavascript(fileScript, null)
                 view.evaluateJavascript(WebAppearance.script(), null)
                 // Prove the JS half is actually present. If DshNative is missing the

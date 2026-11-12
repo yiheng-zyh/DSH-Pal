@@ -34,9 +34,11 @@ package com.dsh.mobile.core
  * port, for text the user is about to paste into a public issue. The on-device
  * buffer keeps the host: without it "which endpoint failed" cannot be answered.
  *
- * Version strings such as `151.0.7872.129` are deliberately untouched. They look
- * like dotted quads, and the four-group pattern cannot match them, because the
- * WebView build is the single most useful field in the export header.
+ * Version strings such as `151.0.7872.129` are deliberately untouched: the
+ * four-group pattern requires each octet ≤ 255 and a nonzero first octet, so
+ * neither a modern build (`7872` is no octet) nor a zero-major system WebView
+ * (`0.0.0.0`, the exact header field issue #1 lost) can match. The WebView build
+ * is the single most useful field in the export header.
  *
  * The pass is single-scan (URL spans are rewritten, the text between them is
  * redacted) so a URL and a plain-text secret in the same line never interfere,
@@ -95,8 +97,17 @@ object LogSanitizer {
 
     private val bearer = Regex("(?i)Bearer\\s+[^\\s,;]+")
 
-    /** A dotted quad, but never a fragment of a version string (see class doc). */
-    private val ipv4 = Regex("(?<![\\w.])(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?![\\w.])")
+    /**
+     * A real IPv4 dotted quad: first octet 1–255, the rest 0–255, never a
+     * fragment of a longer number (see class doc). The octet bounds are what
+     * keep version strings readable — `151.0.7872.129` fails on `7872`, and
+     * `0.0.0.0` (a system WebView build) fails on the leading zero. `0.0.0.0`
+     * as an address is never a real peer, so nothing sensitive is lost.
+     */
+    private val ipv4 = Regex(
+        "(?<![\\w.])(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]?)" +
+            "(?:\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[0-9]{1,2})){3}(?![\\w.])"
+    )
 
     /**
      * Compressed IPv6 only (must contain `::`). A fully expanded IPv6 literal is

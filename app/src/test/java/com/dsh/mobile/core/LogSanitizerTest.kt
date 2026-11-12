@@ -118,6 +118,19 @@ class LogSanitizerTest {
         assertTrue(LogSanitizer.clean("webview 151.0.7872.129").contains("151.0.7872.129"))
     }
 
+    @Test fun webviewVersionStringsSurviveIpRedaction() {
+        // issue #1：卓易通日志头 `webview: <ver>` 被当成 IP 脱敏，导出后读不到
+        // 内核版本——诊断最关键的字段被日志器自己抹掉了。版本号必须原样保留。
+        assertTrue(LogSanitizer.clean("webview: 0.0.0.0 (old)").contains("0.0.0.0"))
+        assertTrue(LogSanitizer.clean("webview: 114.0.5735.196 (old)").contains("114.0.5735.196"))
+        assertTrue(LogSanitizer.clean("webview: 100.0.4896.127 (old)").contains("100.0.4896.127"))
+        assertTrue(LogSanitizer.clean("webview: 151.0.7872.129 (ok)").contains("151.0.7872.129"))
+        // 真实 IP（各段 ≤255、首段非零）仍必须被脱敏。
+        assertFalse(LogSanitizer.clean("connect 192.168.1.12 failed").contains("192.168.1.12"))
+        assertFalse(LogSanitizer.clean("peer 10.8.0.5 answered").contains("10.8.0.5"))
+        assertFalse(LogSanitizer.clean("addr 255.255.255.255").contains("255.255.255.255"))
+    }
+
     @Test fun bareIpv6AndLocalAndroidPathsAreRedacted() {
         assertTrue(LogSanitizer.clean("peer fd83::1 answered").contains("<ip>"))
         assertTrue(LogSanitizer.clean("db at /data/user/0/com.dsh.mobile/files/a.db").contains("<local-path>"))
