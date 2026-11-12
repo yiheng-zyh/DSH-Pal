@@ -271,7 +271,10 @@ object WebLayoutScript {
       if(!matchMedia('(min-width:901px) and (pointer:coarse)').matches) return;
       var rail=document.querySelector('[data-dsh-mobile-right]');
       if(!rail) return;
-      var pane=rail.querySelector('[class*="_panel"]');
+      // Prefer the dock's declared panel container. The substring selector
+      // [class*="_panel"] also matches _panelHeader/_panelBody and could resolve
+      // to the header (document order), putting the scroll styles on the wrong node.
+      var pane=rail.querySelector('[data-sidebar-right-panel]')||rail.querySelector('[class*="_panel"]');
       if(pane){
         pane.style.setProperty('overflow-y','auto','important');
         pane.style.setProperty('overflow-x','hidden','important');

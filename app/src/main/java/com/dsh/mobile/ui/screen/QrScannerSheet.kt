@@ -2,6 +2,7 @@ package com.dsh.mobile.ui.screen
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -92,6 +93,50 @@ fun QrScannerSheet(
     }
     var error by remember { mutableStateOf<String?>(null) }
     var consumed by remember { mutableStateOf(false) }
+    var decoding by remember { mutableStateOf(false) }
+
+    // 从相册选一张含二维码的图片来配对：用户常把电脑面板的二维码截图存进相册，
+    // 或收到别人发来的二维码图片，不必再对着屏幕扫。复用同一套 ML Kit 解码与
+    // onScanned 回调，因此所有调用方（引导页 / VPN / 配对）自动获得该能力。
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        if (consumed) return@rememberLauncherForActivityResult
+        decoding = true
+        error = null
+        runCatching {
+            val image = InputImage.fromFilePath(context, uri)
+            val options = BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build()
+            val client = BarcodeScanning.getClient(options)
+            client.process(image)
+                .addOnSuccessListener { codes ->
+                    client.close()
+                    decoding = false
+                    val value = codes.firstNotNullOfOrNull { it.rawValue }
+                    if (value != null && !consumed) {
+                        consumed = true
+                        RunLog.info("QrScan", "decoded QR from gallery; chars=${value.length}; payload excluded")
+                        onScanned(value)
+                    } else if (value == null) {
+                        error = "这张图片里没有可识别的二维码，换一张试试"
+                        RunLog.warn("QrScan", "gallery image had no QR code")
+                    }
+                }
+                .addOnFailureListener {
+                    client.close()
+                    decoding = false
+                    error = "图片读取失败，换一张试试"
+                    RunLog.warn("QrScan", "gallery decode failed: ${it.javaClass.simpleName}")
+                }
+        }.onFailure {
+            decoding = false
+            error = "无法打开这张图片，换一张试试"
+            RunLog.warn("QrScan", "gallery image open failed: ${it.javaClass.simpleName}")
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -224,8 +269,39 @@ fun QrScannerSheet(
                 Text(text = msg, color = DshAccents.error, fontSize = 13.sp)
                 Spacer(Modifier.height(18.dp))
             }
+            GalleryPickButton(
+                enabled = !decoding && !consumed,
+                label = if (decoding) "正在识别…" else "从相册选择二维码",
+            ) {
+                galleryLauncher.launch(
+                    androidx.activity.result.PickVisualMediaRequest(
+                        ActivityResultContracts.PickVisualMedia.ImageOnly,
+                    ),
+                )
+            }
+            Spacer(Modifier.height(14.dp))
             ScanCancelButton(onCancel = onCancel)
         }
+    }
+}
+
+@Composable
+private fun GalleryPickButton(enabled: Boolean, label: String, onClick: () -> Unit) {
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(22.dp))
+            .background(DshAccents.accent.copy(alpha = if (enabled) 0.22f else 0.10f))
+            .pressScale(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+            )
+            .padding(horizontal = 26.dp, vertical = 11.dp),
+    ) {
+        Text(text = label, color = if (enabled) Color.White else Color(0xFF8A93A0), fontSize = 14.sp)
     }
 }
 

@@ -14,7 +14,6 @@
   [data-dsh-mobile-center] [class$="_headerActions"] > * { flex:0 0 auto!important; }
   [data-conversation-tabs] { position:relative!important; }
   [data-conversation-tabs] [role="tab"]::after { display:none!important; }
-  .dsh-tab-indicator { position:absolute; left:0; bottom:0; height:2px; background:#4f8cff; border-radius:2px; pointer-events:none; transition:transform 240ms cubic-bezier(.2,0,0,1),width 240ms cubic-bezier(.2,0,0,1); }
   [data-dsh-mobile-center] [class$="_crumbs"] button { min-width:0!important; max-width:100%!important; overflow:hidden!important; text-overflow:ellipsis!important; white-space:nowrap!important; }
   [data-dsh-mobile-center] [class$="_composerSeat"] [class$="_dock"] > * { flex:0 0 auto!important; }
 
@@ -168,6 +167,15 @@
 @media (prefers-reduced-motion:reduce) { [data-dsh-mobile-right-surface] { animation:none!important; } }
 @media (prefers-reduced-motion:reduce) { .dsh-tab-indicator { transition:none!important; } }
 
+/* The tab underline is injected by page-motion.js at every width, so its base
+   geometry must apply at every width too. Previously it lived only in the <=900
+   block, leaving a width-bearing but unpositioned span that occupied flex space
+   on wide tablet windows. Absolute positioning keeps it out of the flow. */
+@media (pointer:coarse) {
+  [data-conversation-tabs] { position:relative; }
+  .dsh-tab-indicator { position:absolute; left:0; bottom:0; height:2px; background:#4f8cff; border-radius:2px; pointer-events:none; transition:transform 240ms cubic-bezier(.2,0,0,1),width 240ms cubic-bezier(.2,0,0,1); }
+}
+
 @media (max-width:900px) and (pointer:coarse) {
   [data-dsh-mobile-frame]:not([data-dsh-mobile-has-left]):not([data-dsh-mobile-has-right]) { grid-template-columns:minmax(0,1fr)!important; }
   [data-dsh-mobile-frame]:not([data-dsh-mobile-has-left]):not([data-dsh-mobile-has-right]) > [data-dsh-mobile-center] { grid-column:1/-1!important; }
@@ -297,6 +305,13 @@ body:has([data-dsh-mobile-frame]) .we-rope { display:none!important; }
      it cannot 閳?so the missing piece is here, in the wide branch. Bound the rail
      and let its content scroll; `display` stays untouched because this element's
      layout belongs to the plugin dock. */
+}
+
+/* Right-rail scroll fallback for ALL wide coarse windows (>=901px), including the
+   tablet's 1152px landscape where the 901-1100 overlay block above does not apply.
+   Kept separate from overlay geometry so widening it never turns the docked rail
+   into an overlay. Mirrors WebLayoutScript.fixRightRailScroll's min-width:901 guard. */
+@media (min-width:901px) and (pointer:coarse) {
   [data-dsh-mobile-right-contract]:has([data-sidebar-right-open="true"]),
   [data-dsh-mobile-frame] > [data-dsh-mobile-right] {
     overflow-y:auto!important; overflow-x:hidden!important;

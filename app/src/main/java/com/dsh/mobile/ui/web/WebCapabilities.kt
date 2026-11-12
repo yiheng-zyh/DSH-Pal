@@ -52,7 +52,11 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
     @JavascriptInterface fun hasPendingTransfer(): Boolean = download != null || upload != null || audio != null
     @JavascriptInterface fun webLayoutMode(): String = com.dsh.mobile.core.SettingsStore(context).webLayoutMode.name
     @JavascriptInterface fun enhancedInteractions(): Boolean = com.dsh.mobile.core.SettingsStore(context).enhancedInteractions
-    @JavascriptInterface fun largeWindow(): Boolean = context.resources.configuration.let { minOf(it.screenWidthDp,it.screenHeightDp)>=600 }
+    // AUTO 模式据此决定桌面/手机布局。必须看「当前窗口宽度」而不是设备短边：
+    // 平板竖屏短边 720dp≥600 会恒判桌面，把 720dp 的屏强行按 1024 CSS 宽排版，
+    // 整体缩到 0.70×，触摸目标与正文随之缩小（实测 69/69 目标 <40dp、正文 11.3dp）。
+    // 改为按当前宽度判定后：竖屏 720dp 走手机布局（1:1 不缩放），横屏 1152dp 仍走桌面。
+    @JavascriptInterface fun largeWindow(): Boolean = context.resources.configuration.screenWidthDp >= 900
     @JavascriptInterface fun windowWidth(): Int = context.resources.configuration.screenWidthDp
     @JavascriptInterface fun multiWindow(): Boolean {
         var owner = context
