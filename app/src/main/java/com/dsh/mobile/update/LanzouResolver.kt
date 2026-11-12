@@ -84,8 +84,8 @@ object LanzouResolver {
         val fid = rx("filemoreajax\\.php\\?file=(\\d+)") ?: return null
         val uid = rx("'uid':'(\\d+)'") ?: return null
         val puid = rx("'puid':'([^']+)'") ?: return null
-        val t = rx("ib2bwb\\s*=\\s*'(\\d+)'") ?: return null
-        val k = rx("_h0ny4\\s*=\\s*'([^']+)'") ?: return null
+        val t = rx("=\\s*'(\\d{10})'") ?: return null
+        val k = rx("=\\s*'([a-f0-9]{32})'") ?: return null
         val form = FormBody.Builder()
             .add("lx", "2").add("fid", fid).add("uid", uid).add("puid", puid)
             .add("pg", "1").add("rep", "0").add("t", t).add("k", k)
