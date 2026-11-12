@@ -1,15 +1,15 @@
 {
-  "product": "DSH Pal",
-  "version": "0.1.1",
-  "versionCode": 10,
-  "updated": "2026-11-06",
-  "apkName": "DSH-Pal-0.1.1.apk",
-  "sizeMb": 80.8,
-  "sha256": "6E35DCD99BE50B92266934B490A84FA4B191F7AADADA1D57886273C1E591C822",
-  "lanzou": {
-    "url": "https://wwbvv.lanzoul.com/b01i5zkceh",
-    "password": "i1x2"
-  },
-  "github": "https://github.com/yiheng-zyh/DSH-Pal/releases/latest",
-  "desktop": "https://github.com/deepseek-ai/deepseek-harness/releases"
+    "product":  "DSH Pal",
+    "version":  "0.1.2",
+    "versionCode":  11,
+    "updated":  "2026-11-12",
+    "apkName":  "DSH-Pal-0.1.2.apk",
+    "sizeMb":  80.8,
+    "sha256":  "B4193EE25B53B5BF0F08D7DC2CD3C351AAE7C431EB396B6A7378D2C9F7746D67",
+    "lanzou":  {
+                   "url":  "https://wwbvv.lanzoul.com/b01i5zkceh",
+                   "password":  "i1x2"
+               },
+    "github":  "https://github.com/yiheng-zyh/DSH-Pal/releases/latest",
+    "desktop":  "https://github.com/deepseek-ai/deepseek-harness/releases"
 }
