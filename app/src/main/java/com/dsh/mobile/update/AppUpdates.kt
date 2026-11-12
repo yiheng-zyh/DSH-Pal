@@ -1,6 +1,7 @@
 package com.dsh.mobile.update
 
 import android.content.Context
+import android.webkit.CookieManager
 import com.dsh.mobile.BuildConfig
 import com.dsh.mobile.core.*
 import java.io.File
@@ -50,6 +51,8 @@ class AppUpdates private constructor(context:Context) {
         scope.launch{
             try{
                 var release=state.value.release;var releaseMessage=""
+                var mirror:AppRelease?=null
+                try{ mirror=runCatching{AppRelease.fromDownloadJson(text(AppLinks.DOWNLOAD_JSON,256*1024),BuildConfig.VERSION_NAME)}.getOrNull() }catch(_:Exception){}
                 try{
                     val body=text(AppLinks.RELEASE_API,1024*1024)
                     release=AppRelease.latest(body,BuildConfig.VERSION_NAME,state.value.previews)
@@ -61,6 +64,14 @@ class AppUpdates private constructor(context:Context) {
                     releaseMessage=if(release==null)"未发现比当前版本更新的已发布版本"else "发现新版本 ${release.version}"
                 }catch(e:Exception){
                     releaseMessage=if(e is RateLimited)"检查过于频繁，请稍后重试或打开发布页"else "暂时无法检查更新，请检查网络后重试"
+                }
+                // 国内下载页（蓝奏云）与 GitHub 任一可用即提示新版本；同版本时把蓝奏云信息并入，供优先下载。
+                val gh=release
+                release=when{
+                    gh!=null&&mirror!=null&&mirror.version==gh.version->gh.copy(lanzouUrl=mirror.lanzouUrl,lanzouPassword=mirror.lanzouPassword,apkName=mirror.apkName)
+                    gh!=null->gh
+                    mirror!=null->{releaseMessage="发现新版本 ${mirror.version}（国内下载）";mirror}
+                    else->null
                 }
                 var news:List<AppAnnouncement>?=null;var newsMessage=""
                 try{
@@ -112,7 +123,7 @@ class AppUpdates private constructor(context:Context) {
     }
     fun download(){
         val release=state.value.release?:return
-        if(!release.downloadable||downloading?.isActive==true)return
+        if((!release.downloadable&&!release.hasLanzou)||downloading?.isActive==true)return
         cancelled.set(false)
         mutable.update{it.copy(downloading=true,downloaded=0,readyFile=null,downloadMessage="正在下载，离开页面仍可继续；结束 App 会中断")}
         downloading=scope.launch{
@@ -120,15 +131,38 @@ class AppUpdates private constructor(context:Context) {
                 val directory=File(app.cacheDir,"app-updates")
                 val saved=File(directory,"update.apk")
                 val file=if(UpdateDownload.matches(saved,release.apkSize,release.sha256!!))saved else{
-                    open(release.apkUrl!!,true).use{response->
-                        kotlin.check(response.code==200){"下载暂不可用，请稍后重试"}
-                        val body=response.body?:throw IOException("下载内容为空")
-                        kotlin.check(body.contentLength()==-1L||body.contentLength()==release.apkSize){"安装包大小与发布记录不一致"}
-                        var last=0L
-                        body.byteStream().use{input->UpdateDownload.receive(input,directory,release.apkSize,release.sha256,{cancelled.get()||!isActive}){bytes->
-                            val now=System.currentTimeMillis();if(now-last>=250||bytes==release.apkSize){last=now;mutable.update{it.copy(downloaded=bytes)}}
-                        }}
+                    // 优先蓝奏云（国内快）；解析或下载失败再回退 GitHub。
+                    var received=false
+                    if(release.hasLanzou){
+                        mutable.update{it.copy(downloadMessage="正在从蓝奏云解析下载地址…")}
+                        val resolved=runCatching{LanzouResolver.resolve(app,release.lanzouUrl!!,release.lanzouPassword.orEmpty(),release.apkName?:"DSH-Pal-${release.version}.apk")}.getOrNull()
+                        if(resolved!=null){
+                            runCatching{
+                                openDirect(resolved.first,resolved.second).use{response->
+                                    kotlin.check(response.code==200){"蓝奏云下载暂不可用"}
+                                    val body=response.body?:throw IOException("下载内容为空")
+                                    var last=0L
+                                    body.byteStream().use{input->UpdateDownload.receive(input,directory,release.apkSize,release.sha256,{cancelled.get()||!isActive}){bytes->
+                                        val now=System.currentTimeMillis();if(now-last>=250||bytes==release.apkSize){last=now;mutable.update{it.copy(downloaded=bytes)}}
+                                    }}
+                                }
+                                received=true
+                            }.onFailure{ mutable.update{it.copy(downloadMessage="蓝奏云下载中断，切换 GitHub 重试…")} }
+                        }
                     }
+                    if(!received){
+                        kotlin.check(release.apkUrl!=null){"暂无可用下载源，请稍后重试或从发布页下载"}
+                        open(release.apkUrl!!,true).use{response->
+                            kotlin.check(response.code==200){"下载暂不可用，请稍后重试"}
+                            val body=response.body?:throw IOException("下载内容为空")
+                            kotlin.check(body.contentLength()==-1L||body.contentLength()==release.apkSize){"安装包大小与发布记录不一致"}
+                            var last=0L
+                            body.byteStream().use{input->UpdateDownload.receive(input,directory,release.apkSize,release.sha256,{cancelled.get()||!isActive}){bytes->
+                                val now=System.currentTimeMillis();if(now-last>=250||bytes==release.apkSize){last=now;mutable.update{it.copy(downloaded=bytes)}}
+                            }}
+                        }
+                    }
+                    saved
                 }
                 if(cancelled.get()||!isActive)throw CancellationException()
                 UpdateInstaller.verify(app,file,release)
@@ -141,6 +175,13 @@ class AppUpdates private constructor(context:Context) {
                 mutable.update{it.copy(downloading=false,readyFile=null,downloadMessage=message)}
             }finally{downloadCall=null}
         }
+    }
+    /** 蓝奏云直链下载：带解析出的 Cookie，跟随 CDN 跳转，不做 GitHub 白名单校验。 */
+    private fun openDirect(url:String,cookie:String):Response {
+        val builder=Request.Builder().url(url).header("User-Agent","Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
+        if(cookie.isNotBlank())builder.header("Cookie",cookie)
+        val call=client.newCall(builder.build());downloadCall=call;if(cancelled.get())call.cancel()
+        return call.execute()
     }
     fun cancelDownload(){cancelled.set(true);downloadCall?.cancel()}
     fun invalidateDownloaded(message:String){mutable.update{it.copy(readyFile=null,downloadMessage=message)}}

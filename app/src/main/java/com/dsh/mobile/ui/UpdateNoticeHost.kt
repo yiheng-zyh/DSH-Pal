@@ -31,8 +31,12 @@ import com.dsh.mobile.update.AppUpdates
             ?:AppAnnouncement("installed-${BuildConfig.VERSION_CODE}","本版本更新说明",localNotes,"").takeIf{!updates.seen(it.id)}
         if(candidate!=null){notice=candidate;presented=true}
     }
-    if(settled)ConfirmationDialog(notice!=null,notice?.title.orEmpty(),notice?.body.orEmpty().take(2000),cancelText="稍后",confirmText="查看详情",
-        onDismiss={notice?.let{updates.markSeen(it.id)};notice=null},onConfirm={notice?.let{updates.markSeen(it.id)};notice=null;openUpdates=true})
+    val isRelease=notice?.id?.startsWith("release-")==true
+    if(settled)ConfirmationDialog(notice!=null,notice?.title.orEmpty(),notice?.body.orEmpty().take(2000),cancelText="稍后",confirmText=if(isRelease)"下载更新"else "查看详情",
+        onDismiss={notice?.let{updates.markSeen(it.id)};notice=null},onConfirm={
+            notice?.let{updates.markSeen(it.id)};notice=null
+            if(isRelease){updates.download();openUpdates=true}else openUpdates=true
+        })
     if(openUpdates)Dialog(onDismissRequest={openUpdates=false},properties=DialogProperties(usePlatformDefaultWidth=false,decorFitsSystemWindows=false)){
         com.dsh.mobile.ui.screen.UpdatesScreen{openUpdates=false}
     }

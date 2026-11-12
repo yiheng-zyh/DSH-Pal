@@ -44,4 +44,21 @@ class AppReleaseTest {
         assertTrue(AppAnnouncement.parse(root.toString(),7).isEmpty());assertTrue(AppAnnouncement.parse(root.toString(),10).isEmpty())
         a.put("id","unsafe/id");assertTrue(AppAnnouncement.parse(root.toString(),8).isEmpty())
     }
+    @Test fun downloadJsonProvidesLanzouMirrorOnlyWhenNewerAndValid(){
+        val sha="d".repeat(64)
+        val json=JSONObject().put("version","0.2.0").put("versionCode",11).put("sizeMb",80.8)
+            .put("sha256",sha.uppercase()).put("apkName","DSH-Pal-0.2.0.apk")
+            .put("lanzou",JSONObject().put("url","https://wwbvv.lanzoul.com/b01i5zkceh").put("password","i1x2"))
+        val r=AppRelease.fromDownloadJson(json.toString(),"0.1.1")
+        assertNotNull(r);assertEquals("0.2.0",r!!.version);assertTrue(r.hasLanzou);assertFalse(r.downloadable)
+        assertEquals(sha,r.sha256);assertEquals("DSH-Pal-0.2.0.apk",r.apkName)
+        assertEquals((80.8*1024*1024).toLong(),r.apkSize)
+        // 不高于当前版本 → 不提供
+        assertNull(AppRelease.fromDownloadJson(json.toString(),"0.2.0"))
+        assertNull(AppRelease.fromDownloadJson(json.toString(),"0.3.0"))
+        // 缺校验值 / 缺大小 / 坏 JSON → 不提供
+        assertNull(AppRelease.fromDownloadJson(JSONObject().put("version","0.2.0").put("sizeMb",80.8).toString(),"0.1.1"))
+        assertNull(AppRelease.fromDownloadJson(JSONObject().put("version","0.2.0").put("sha256",sha).toString(),"0.1.1"))
+        assertNull(AppRelease.fromDownloadJson("not json","0.1.1"))
+    }
 }

@@ -9,6 +9,7 @@ object AppLinks {
     const val RELEASES="$PROJECT/releases"
     const val RELEASE_API="https://api.github.com/repos/yiheng-zyh/DSH-Pal/releases?per_page=20"
     const val ANNOUNCEMENTS="https://raw.githubusercontent.com/yiheng-zyh/DSH-Pal/main/updates/announcements.json"
+    const val DOWNLOAD_JSON="https://yiheng-zyh.github.io/DSH-Pal/download/download.json"
     const val BILIBILI="https://space.bilibili.com/1834666481"
     fun releaseUrl(raw:String):Boolean=runCatching {
         val u=URI(raw)
@@ -39,9 +40,25 @@ data class ReleaseVersion(val numbers:List<Long>,val pre:List<String>):Comparabl
     }
 }
 data class AppRelease(val id:String,val version:String,val title:String,val notes:String,val pageUrl:String,
-                      val apkUrl:String?,val apkSize:Long,val sha256:String?,val checksumsUrl:String?,val publishedAt:String) {
+                      val apkUrl:String?,val apkSize:Long,val sha256:String?,val checksumsUrl:String?,val publishedAt:String,
+                      val lanzouUrl:String?=null,val lanzouPassword:String?=null,val apkName:String?=null) {
     val downloadable get()=apkUrl!=null&&sha256!=null
+    val hasLanzou get()=!lanzouUrl.isNullOrBlank()&&sha256!=null
     companion object {
+        /** 国内下载页数据（GitHub Pages 托管的 download.json），含蓝奏云文件夹与校验值。 */
+        fun fromDownloadJson(json:String,current:String):AppRelease? {
+            val installed=ReleaseVersion.parse(current)?:return null
+            val root=runCatching{JSONObject(json)}.getOrNull()?:return null
+            val tag=root.optString("version");val v=ReleaseVersion.parse(tag)?:return null
+            if(v<=installed)return null
+            val sizeMb=root.optDouble("sizeMb",0.0);if(sizeMb<=0)return null
+            val sha=root.optString("sha256").lowercase();if(!sha.matches(Regex("[a-f0-9]{64}")))return null
+            val lanzou=root.optJSONObject("lanzou")
+            val name=root.optString("apkName").ifBlank{"DSH-Pal-$tag.apk"}
+            return AppRelease("mirror-$tag",tag,"DSH Pal $tag","",root.optString("github").ifBlank{AppLinks.RELEASES},
+                null,(sizeMb*1024*1024).toLong(),sha,null,root.optString("updated").take(40),
+                lanzou?.optString("url")?.takeIf{it.isNotBlank()},lanzou?.optString("password")?.takeIf{it.isNotBlank()},name)
+        }
         fun latest(json:String,current:String,includePreview:Boolean):AppRelease? {
             val installed=ReleaseVersion.parse(current)?:error("当前版本号无法识别")
             val rows=JSONArray(json);val candidates=mutableListOf<Pair<ReleaseVersion,AppRelease>>()

@@ -78,8 +78,8 @@ fun UpdatesScreen(onBack:()->Unit){
                                     }
                                 }
                             },enabled=!installing){Text(if(installing)"正在校验…"else "安装更新")}
-                        }else if(release.downloadable){
-                            Button(onClick={confirmDownload=true}){Text("下载更新 · ${ResourceLoad.size(release.apkSize)}")}
+                        }else if(release.downloadable||release.hasLanzou){
+                            Button(onClick={confirmDownload=true}){Text((if(release.hasLanzou)"蓝奏云下载更新"else "下载更新")+" · ${ResourceLoad.size(release.apkSize)}")}
                         }else Text("此发布缺少唯一正式安装包或完整校验信息，请从发布页查看附件。",fontSize=12.sp)
                         if(state.downloadMessage.isNotBlank())Text(state.downloadMessage,fontSize=12.sp)
                         Button(onClick={open(release.pageUrl)}){Text("查看此版本发布页")}
