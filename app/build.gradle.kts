@@ -21,8 +21,8 @@ android {
         applicationId = "com.dsh.mobile"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.1.3v2"
+        versionCode = 14
+        versionName = "0.1.4"
         buildConfigField("boolean", "USB_DEVELOPMENT", usbDevelopment.toString())
         // Inspect the existing route without switching to isolated USB profiles.
         buildConfigField("boolean", "WEB_INSPECTION", (usbDevelopment ||
