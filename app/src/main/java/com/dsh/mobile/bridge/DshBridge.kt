@@ -64,7 +64,7 @@ class DshBridge(
 
         /** A WebSocket opened or closed; useful for connection indicators. */
         fun onSocketState(connected: Boolean) = Unit
-        fun onDismissKeyboard() = Unit
+        fun onDismissKeyboard(keepFocus: Boolean) = Unit
 
         /** The page reported an uncaught error. */
         fun onPageError(message: String) = Unit
@@ -220,7 +220,13 @@ class DshBridge(
                     lastBusinessSummary=stateSignature
                     com.dsh.mobile.core.RunLog.info("Network","business $summary latencyMs=${health.lastLatencyMs}")
                 }
-                val measured=health.copy(completedResources=data.optInt("completedResources").coerceIn(0,4096),resourceBytes=data.optLong("resourceBytes",-1).coerceAtLeast(-1))
+                val measured=health.copy(
+                    completedResources=data.optInt("completedResources").coerceIn(0,4096),
+                    resourceBytes=data.optLong("resourceBytes",-1).coerceAtLeast(-1),
+                    cacheHits=data.optInt("cacheHits").coerceIn(0,4096),
+                    cacheBytes=data.optLong("cacheBytes").coerceAtLeast(0),
+                    pausedPlugins=data.optInt("pausedPlugins").coerceIn(0,512),
+                )
                 post { listener?.onBusinessHealth(measured) }
             }
             "web-capability" -> {
@@ -232,7 +238,7 @@ class DshBridge(
                     com.dsh.mobile.core.RunLog.info(if (feature == "file-upload") "File" else "Permission", "web $feature phase=$phase detail=$detail")
                 }
             }
-            "dismiss-keyboard" -> post { listener?.onDismissKeyboard() }
+            "dismiss-keyboard" -> post { listener?.onDismissKeyboard(parsed.optBoolean("keepFocus")) }
             "page-probe-result" -> {
                 val data=parsed.optJSONObject("payload") ?: return
                 val id=data.optString("id")
@@ -499,7 +505,10 @@ class DshBridge(
 
     /** Inject the bridge script into [webView]. Safe to call repeatedly. */
     fun install(webView: WebView, forwardEvents: Boolean = true) {
-        val script = BridgeScript.build(forwardEvents = forwardEvents, forwardState = true) + "\n" + WebMotionScript.build() + "\n" + WebLayoutScript.build(webView.context)
+        val presentation = com.dsh.mobile.ui.web.WebPluginCompatibility.presentation(
+            WebMotionScript.build() + "\n" + WebLayoutScript.build(webView.context),
+        )
+        val script = BridgeScript.build(forwardEvents = forwardEvents, forwardState = true) + "\n" + presentation
         webView.evaluateJavascript(script) { result ->
             Log.i(TAG, "bridge install result=$result")
         }
@@ -564,12 +573,12 @@ class DshBridge(
     }
 
     private var overlayChatSource:String?=null
-    fun overlayChat(action:JSONObject?=null,callback:(JSONObject?)->Unit){
+    fun overlayChat(action:JSONObject?=null,preview:Boolean=false,callback:(JSONObject?)->Unit){
         val view=webViewProvider();val profile=profileProvider()?.id
         if(view==null||profile==null||profile!=boundProfileId){callback(null);return}
         val source=overlayChatSource?:runCatching{view.context.assets.open("overlay-chat.js").bufferedReader().use{it.readText()}}.getOrNull()?.also{overlayChatSource=it}
         if(source==null){callback(null);return}
-        val call=if(action?.optBoolean("older")==true)"({outcome:window.__DSH_OVERLAY_CHAT__.older("+JSONObject.quote(action.optString("context"))+")})" else if(action==null)"window.__DSH_OVERLAY_CHAT__.read()" else "({outcome:window.__DSH_OVERLAY_CHAT__.act("+JSONObject.quote(action.optString("context"))+","+JSONObject.quote(action.optString("token"))+","+JSONObject.quote(action.optString("id"))+","+JSONObject.quote(action.optString("value"))+")})"
+        val call=if(action?.optBoolean("older")==true)"({outcome:window.__DSH_OVERLAY_CHAT__.older("+JSONObject.quote(action.optString("context"))+")})" else if(action==null)"window.__DSH_OVERLAY_CHAT__.read($preview)" else "({outcome:window.__DSH_OVERLAY_CHAT__.act("+JSONObject.quote(action.optString("context"))+","+JSONObject.quote(action.optString("token"))+","+JSONObject.quote(action.optString("id"))+","+JSONObject.quote(action.optString("value"))+")})"
         view.evaluateJavascript(source+";"+call){result->callback(if(profileProvider()?.id==profile)runCatching{JSONObject(result)}.getOrNull() else null)}
     }
     private val quickCallbacks = mutableMapOf<String,(String)->Unit>()

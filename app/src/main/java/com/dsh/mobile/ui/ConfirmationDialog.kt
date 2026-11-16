@@ -23,10 +23,13 @@ fun ConfirmationDialog(show: Boolean, title: String, message: String, cancelText
     if (!show) return
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(Modifier.padding(20.dp).widthIn(max = 420.dp).fillMaxWidth(), cornerRadius = 28.dp) {
-            Column(Modifier.heightIn(max=(androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp-48).coerceAtLeast(160).dp).verticalScroll(rememberScrollState()).padding(24.dp)) {
+            val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
+            Column(Modifier.heightIn(max=(screenHeight - 56).coerceAtLeast(160).dp).padding(24.dp)) {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
-                Text(message, fontSize = 14.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                Box(Modifier.weight(1f, fill = false).heightIn(max = (screenHeight * .55f).dp).verticalScroll(rememberScrollState())) {
+                    Text(message, fontSize = 14.sp, lineHeight = 21.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                }
                 Spacer(Modifier.height(24.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(cancelText) }

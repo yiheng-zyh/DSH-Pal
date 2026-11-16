@@ -233,6 +233,7 @@ object PageProbeScript {
     fun injectCheck(): String = """
 (function () {
   var names = ['DshNative', '__DSH_MOBILE_BRIDGE__', '__DSH_VIEWPORT__', '__DSH_JS_ERRORS__', '__DSH_RES_PROBE__', '__DSH_OFFLINE_GUARD__', '__DSH_POLYFILLS__'];
+  try { if (DshFiles.originalDshPage()) names = names.filter(function (name) { return name !== '__DSH_VIEWPORT__'; }); } catch (_) {}
   var missing = [];
   for (var i = 0; i < names.length; i++) {
     try { if (!window[names[i]]) missing.push(names[i]); } catch (_) { missing.push(names[i]); }

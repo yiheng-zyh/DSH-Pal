@@ -2,10 +2,21 @@
   if(window.top!==window||window.__DSH_BUSINESS_HEALTH__)return;
   var pending=new Set(),slow=new Set(),resources=new Set(),restricted=new Set(),loading=new Map(),samples=[],lastSuccess=0,lastLatency=0,sequence=0,writes=0;
   var completedResources=new Set(),timings=new Set(),resourceBytes=-1,resourcePublishTimer=null;
+  var cacheHits=0,cacheBytes=0,cacheSamples=0;
   function resourceChanged(){if(resourcePublishTimer!==null)return;resourcePublishTimer=setTimeout(function(){resourcePublishTimer=null;publish();},200);}
   window.__DSH_PENDING_WRITES__=function(){return writes>0;};
-  function snapshot(){return{sampleCount:samples.length,failurePercent:samples.length?Math.round(samples.filter(x=>!x).length*100/samples.length):-1,slowPending:slow.size,resourceFailures:resources.size,restrictedPlugins:restricted.size,lastSuccessAgeMs:lastSuccess?Math.round(performance.now()-lastSuccess):-1,lastLatencyMs:lastLatency,loadingResources:loading.size,completedResources:completedResources.size,resourceBytes:resourceBytes,oldestResourceMs:loading.size?Math.round(performance.now()-Math.min.apply(null,Array.from(loading.values()))):0};}
-  function publish(){try{DshNative.onBridgeMessage(JSON.stringify({kind:'business-health',payload:snapshot()}));}catch(_){}}
+  function snapshot(){return{sampleCount:samples.length,failurePercent:samples.length?Math.round(samples.filter(x=>!x).length*100/samples.length):-1,slowPending:slow.size,resourceFailures:resources.size,restrictedPlugins:restricted.size,lastSuccessAgeMs:lastSuccess?Math.round(performance.now()-lastSuccess):-1,lastLatencyMs:lastLatency,loadingResources:loading.size,completedResources:completedResources.size,resourceBytes:resourceBytes,cacheHits:cacheHits,cacheBytes:cacheBytes,cacheSamples:cacheSamples,oldestResourceMs:loading.size?Math.round(performance.now()-Math.min.apply(null,Array.from(loading.values()))):0};}
+  function publish(){
+    try {
+      var health=snapshot();
+      var policy=window.__DSH_PAL_PLUGIN_POLICY__;
+      if(policy){
+        var report=policy.report();
+        if(report.supported)health.pausedPlugins=report.paused.length;
+      }
+      DshNative.onBridgeMessage(JSON.stringify({kind:'business-health',payload:health}));
+    }catch(_){}
+  }
   function record(ok){samples.push(ok);if(samples.length>10)samples.shift();}
   function category(raw){try{var url=new URL(raw,location.href),path=url.pathname;if(url.origin!==location.origin)return null;
     if(/^\/(?:remote\/)?api\//.test(path)&&!/(?:\/stream|\/events|restart-button|telemetry|ingest)(?:[/.]|$)/.test(path))return 'api';
@@ -74,6 +85,16 @@
       if(completedResources.size<4096)completedResources.add(entry.name);
       loading.delete(entry.name);resources.delete(entry.name);
       if(Number.isFinite(entry.encodedBodySize)&&entry.encodedBodySize>=0)resourceBytes=Math.max(0,resourceBytes)+entry.encodedBodySize;
+      // A same-origin response with body sizes can be measured. A service
+      // worker can return zero-transfer data without using the browser cache.
+      var browserCache=entry.deliveryType==='cache'||(!entry.workerStart&&entry.transferSize===0);
+      if(entry.decodedBodySize>0&&typeof entry.transferSize==='number'&&(entry.transferSize>0||browserCache)){
+        cacheSamples++;
+        if(browserCache&&entry.transferSize===0){
+          cacheHits++;
+          cacheBytes+=entry.encodedBodySize||0;
+        }
+      }
     }
     resourceChanged();
   });}

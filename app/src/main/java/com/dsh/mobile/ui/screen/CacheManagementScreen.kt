@@ -29,6 +29,28 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private enum class DataPage(val title:String) { Overview("缓存与数据"),Resources("网页资源"),Preferences("页面偏好"),Accounts("网页登录与站点数据") }
+
+@Composable
+private fun BrowserCacheSummary(webView: WebView?, usbPreview: Boolean) {
+    var stats by remember(webView) { mutableStateOf<org.json.JSONObject?>(null) }
+    LaunchedEffect(webView) {
+        while (webView != null) {
+            webView.evaluateJavascript("window.__DSH_BUSINESS_HEALTH__ && window.__DSH_BUSINESS_HEALTH__.snapshot()") {
+                stats = runCatching { org.json.JSONObject(it) }.getOrNull()
+            }
+            kotlinx.coroutines.delay(1500)
+        }
+    }
+    val samples = stats?.optInt("cacheSamples") ?: 0
+    val hits = stats?.optInt("cacheHits") ?: 0
+    val bytes = stats?.optLong("cacheBytes") ?: 0L
+    SettingsHint(
+        if (samples == 0) "当前页面暂无可测量的网页缓存记录。"
+        else "当前页面已测量 $samples 项静态资源 · 缓存复用 $hits 项（${com.dsh.mobile.core.ResourceLoad.size(bytes)}）",
+    )
+    if (usbPreview) Text(WebResourceCache.summary(), fontSize = 13.sp)
+}
+
 @Composable
 fun CacheManagementScreen(settings:SettingsStore,webView:WebView?,onBack:()->Unit,onReload:()->Unit) {
     var page by remember {mutableStateOf(DataPage.Overview)}
@@ -44,27 +66,31 @@ fun CacheManagementScreen(settings:SettingsStore,webView:WebView?,onBack:()->Uni
     if (offline) { OfflineChatScreen { offline = false }; return }
     BackHandler {back()}
     Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background).safeDrawingPadding(),contentAlignment=androidx.compose.ui.Alignment.TopCenter) {
-    Column(Modifier.widthIn(max=840.dp).fillMaxSize().padding(20.dp)) {
+    Column(Modifier.widthIn(max=680.dp).fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp)) {
         AppPageHeader(page.title,onBack={back()})
         AnimatedContent(targetState=page,modifier=Modifier.weight(1f),
             transitionSpec={(fadeIn(tween(160))+slideInHorizontally(tween(200)){it/24}).togetherWith(fadeOut(tween(100)))},label="data-page") { section ->
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             if(section==DataPage.Overview) {
-                DataLink("网页资源","更新插件、样式或图片；保留登录",{page=DataPage.Resources})
-                DataLink("页面偏好","当前站点的设置、草稿与本地存储",{page=DataPage.Preferences})
-                DataLink("网页登录与站点数据","单独管理 Cookie 或完整清理",{page=DataPage.Accounts})
-                Text("清理均需确认。连接地址、主题、Tailscale 账号和 WireGuard 配置不会被删除。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
+                SettingsGroup("数据类型") {
+                    SettingsItem("网页资源","查看缓存复用、刷新插件资源与管理离线对话") { page=DataPage.Resources }
+                    SettingsDivider()
+                    SettingsItem("页面偏好","当前站点的设置、草稿与本地存储") { page=DataPage.Preferences }
+                    SettingsDivider()
+                    SettingsItem("网页登录与站点数据","管理 Cookie 与站点存储") { page=DataPage.Accounts }
+                }
+                SettingsHint("清理前需要确认。连接地址、主题、Tailscale 账号和 WireGuard 配置会保留。")
             }
             if(section==DataPage.Resources) {
-                ChatArchiveCard(settings) { offline=true }
-                Card {Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-                    Text("资源复用",fontWeight=FontWeight.Medium)
-                    Text(WebResourceCache.summary(),fontSize=13.sp)
-                    Text("静态资源最多 96 MB，自动检查更新。对话是否离线可用由上面那个实验开关决定，默认关闭。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
-                }}
+                SettingsGroup("资源复用") {
+                    Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        BrowserCacheSummary(webView, settings.usbStaticPreview)
+                        SettingsHint("按服务器提供的缓存规则复用静态资源。清理资源后，下一次访问会重新下载。")
+                        SettingsAction("重新加载页面", enabled = !busy, onClick = onReload)
+                    }
+                }
                 DataAction(BrowserCleanup.RESOURCES,busy){pending=it}
-                Button(onClick=onReload,enabled=!busy,modifier=Modifier.fillMaxWidth()){Text("重新加载页面")}
-                Text("未发送内容会先提醒。仅清资源后，下一次访问需要重新下载。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
+                ChatArchiveCard(settings) { offline=true }
             }
             if(section==DataPage.Preferences) {
                 Text("清理当前地址的本地存储，可能影响草稿、插件设置或网页授权。保留 Cookie、连接记录和原生账号。",fontSize=13.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
@@ -96,17 +122,11 @@ fun CacheManagementScreen(settings:SettingsStore,webView:WebView?,onBack:()->Uni
         })
     }
 }
-@Composable private fun DataLink(title:String,subtitle:String,onClick:()->Unit) {
-    Card(Modifier.fillMaxWidth().clickable(onClick=onClick)){Row(Modifier.padding(18.dp)) {
-        Column(Modifier.weight(1f)){Text(title,fontSize=16.sp,fontWeight=FontWeight.Medium);Spacer(Modifier.height(6.dp));Text(subtitle,fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)}
-        Text("›",fontSize=24.sp)
-    }}
-}
 @Composable private fun DataAction(action:BrowserCleanup,disabled:Boolean,onClick:(BrowserCleanup)->Unit) {
     Card(Modifier.fillMaxWidth()){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
         Text(action.title,fontSize=15.sp,fontWeight=FontWeight.Medium)
         Text(action.detail,fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
-        Button(enabled=!disabled,onClick={onClick(action)}){Text("选择清理",fontSize=13.sp)}
+        SettingsAction("选择清理", enabled = !disabled) { onClick(action) }
     }}
 }
 
@@ -174,9 +194,6 @@ private fun agoText(at: Long): String {
     LaunchedEffect(enabled) {
         settings.chatArchiveEnabled = enabled
         ChatArchiveCollector.sync(context, active = true)
-        // 打开开关的那一刻就弹出「选择要同步的对话」——用户要求的流程是
-        // 「开启之后直接开始实际下载」，不该让他再去别处找入口。
-        if (enabled) showPicker = true
     }
     LaunchedEffect(quota) {
         settings.chatArchiveQuota = quota
@@ -241,7 +258,10 @@ private fun agoText(at: Long): String {
                         Text("开启对话缓存", fontSize = 14.sp)
                         Text("关闭时不会写入任何对话内容", fontSize = 11.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
                     }
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                    Switch(checked = enabled, onCheckedChange = {
+                        enabled = it
+                        if (it) showPicker = true
+                    })
                 }
             }
             if (enabled) {

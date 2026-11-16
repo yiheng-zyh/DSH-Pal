@@ -13,19 +13,17 @@ data class ConnectionProfile(
     val lastUsedAt: Long = 0,
     val meshProvider: MeshProvider? = null,
 ) {
+    val routeTitle: String
+        get() = if (kind == Kind.CUSTOM && (ConnectionAddress.isSakuraFrp(baseUrl) || label.equals("SAKURA FRP", true)))
+            "SAKURA FRP" else kind.title
+
+    val displayLabel: String
+        get() = if (routeTitle == "SAKURA FRP" && label in setOf(kind.title, "自建固定域名", "国内 frp", "国内通道"))
+            routeTitle else label
+
     enum class MeshProvider { TAILSCALE, WIREGUARD, EXTERNAL }
     enum class Kind(val title: String, val publicEntry:Boolean=false) {
-        // 命名原则：**按它在用户那里的实际地位叫，不按技术分类叫**。
-        //
-        // CUSTOM 原来叫「其他 HTTPS / frp」。用户 2026-11-05 的原话：
-        // 「那个名字感觉是替补品的感觉……听起来感觉就是个替补，但实际他才是主力」。
-        // 他说得对：frp 固定域名正是他日常真正在用的通道，而「其他」这个词把
-        // 主入口说成了兜底选项。TUNNEL / RELAY 是特定服务商的名字，不该让它俩
-        // 天然占住「正式频道」的语感。
-        //
-        // 改成「自建固定域名」：讲清它是什么（自己的域名、自己的转发），
-        // 又不带任何「剩下的/其它」的贬义。副标题在帮助页里继续提 frp/HTTPS 的细节。
-        TUNNEL("Cloudflare Tunnel",true), RELAY("Relay 固定域名中继",true), CUSTOM("自建固定域名",true),
+        TUNNEL("Cloudflare Tunnel",true), RELAY("Relay 固定域名中继",true), CUSTOM("frp / HTTPS 反向代理",true),
         LAN("Wi-Fi 直连"), IPV6("IPv6 直连"), MESH("Tailscale / WireGuard"), USB("USB 数据线")
     }
     companion object {
@@ -41,12 +39,19 @@ data class ConnectionProfile(
                 else if(it=="Cloudflare / Relay") effectiveKind.title
                 else if(effectiveKind!=kind && it==kind.title) effectiveKind.title else it
             }
-            return ConnectionProfile(id, displayLabel.ifBlank { effectiveKind.title }, effectiveKind, origin)
+            val defaultLabel = if (effectiveKind == Kind.CUSTOM && ConnectionAddress.isSakuraFrp(origin)) "SAKURA FRP"
+                else effectiveKind.title
+            return ConnectionProfile(id, displayLabel.ifBlank { defaultLabel }, effectiveKind, origin)
         }
     }
 }
 
 object ConnectionAddress {
+    // The bundled SAKURA FRP setup provisions its public HTTPS address on nyat.app.
+    fun isSakuraFrp(raw: String): Boolean = runCatching {
+        URI(raw).host?.endsWith(".nyat.app", ignoreCase = true) == true
+    }.getOrDefault(false)
+
     /** Only known service hostnames are evidence; DNS/CDN placement is not. */
     fun recognizedRemoteKind(raw:String):ConnectionProfile.Kind? {
         val host=runCatching {URI(raw).host?.lowercase()}.getOrNull() ?: return null

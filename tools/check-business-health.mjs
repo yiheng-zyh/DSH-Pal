@@ -4,16 +4,18 @@ import assert from 'node:assert/strict';
 
 const source=readFileSync(new URL('../app/src/main/assets/business-health.js',import.meta.url),'utf8');
 function harness() {
-  let now=100,sequence=0,handler,reported=[];
+  let now=100,sequence=0,handler,reported=[],observe;
   const timers=new Map(),listeners={};let mutation;
   const context={URL,Set,performance:{now:()=>now},location:{href:'https://example.test/',origin:'https://example.test'},
     document:{hidden:false,addEventListener:(name,fn)=>listeners[name]=fn},
     setTimeout:(fn,ms)=>{timers.set(++sequence,{fn,at:now+ms});return sequence;},clearTimeout:id=>timers.delete(id),setInterval:()=>0,
     MutationObserver:class {constructor(callback){mutation=callback;}observe(){}},
+    PerformanceObserver:class {constructor(callback){observe=callback;}observe(){}},
     DshNative:{onBridgeMessage:raw=>reported.push(JSON.parse(raw))},fetch:(...args)=>handler(...args)};
   context.window=context;context.top=context;vm.runInNewContext(source,context);
   return {context,listeners,reported,addScript(node){mutation([{addedNodes:[node]}]);},set handler(value){handler=value;},
     tick(ms){now+=ms;for(const [id,timer] of [...timers])if(timer.at<=now){timers.delete(id);timer.fn();}},
+    timings(entries){observe({getEntries:()=>entries});},
     health:()=>context.__DSH_BUSINESS_HEALTH__.snapshot()};
 }
 const reply=(status=200,body={ok:true})=>({status,ok:status>=200&&status<300,json:()=>Promise.resolve(body)});
@@ -66,4 +68,27 @@ let cases=0;
   const pending=h.context.fetch('/api/message',{method:'POST'});assert.equal(h.context.__DSH_PENDING_WRITES__(),true);
   resolve(reply());await pending;assert.equal(h.context.__DSH_PENDING_WRITES__(),false);cases++;
 }
-console.log(`PASS ${cases} business-health checks: headers, body stall, recovery, errors, abort, privacy and pending writes`);
+{
+  const h=harness();
+  const entry={name:'https://example.test/plugins/??example/client.js&rev=42',responseStatus:200,decodedBodySize:700,encodedBodySize:500,workerStart:10};
+  h.timings([
+    {...entry,startTime:1,transferSize:800},
+    {...entry,startTime:2,transferSize:0,deliveryType:'cache'},
+    {...entry,startTime:2,transferSize:0,deliveryType:'cache'},
+    {...entry,startTime:3,transferSize:0},
+  ]);
+  assert.equal(h.health().cacheSamples,2);
+  assert.equal(h.health().cacheHits,1);
+  assert.equal(h.health().cacheBytes,500);cases++;
+}
+{
+  const h=harness();
+  h.context.__DSH_PAL_PLUGIN_POLICY__={report:()=>({supported:true,paused:['fixture-plugin'],required:['fixture-required']})};
+  h.addScript({tagName:'SCRIPT',src:'https://example.test/plugins/??fixture/client.js&rev=42'});
+  h.tick(250);
+  assert.equal(h.reported.at(-1).payload.pausedPlugins,1);
+  assert.equal(h.reported.at(-1).payload.restrictedPlugins,0);
+  assert.ok(!JSON.stringify(h.reported.at(-1)).includes('fixture-plugin'));
+  cases++;
+}
+console.log(`PASS ${cases} business-health checks: headers, body stall, recovery, cache, plugin status, errors, abort, privacy and pending writes`);

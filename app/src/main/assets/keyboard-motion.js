@@ -9,6 +9,19 @@
     if (root.matches('[role="menu"],[role="listbox"]')) menus.push(root);
     menus.forEach(function(menu) { menu.style.setProperty('--dsh-ime-offset', offset + 'px'); });
   }
+  document.addEventListener('click', function(event) {
+    if (!(event.target instanceof Element) ||
+        !matchMedia('(max-width:900px) and (pointer:coarse)').matches) return;
+    var button = event.target.closest('[data-composer-seat] button[class$="_add"][aria-haspopup="listbox"]');
+    if (!button || button.disabled) return;
+    var seat = button.closest('[data-composer-seat]');
+    // The upstream plus handler focuses the editor to locate the caret. Keep
+    // that focus for the command menu and hide only the Android keyboard.
+    requestAnimationFrame(function() {
+      if (!button.isConnected || !seat.querySelector('[data-composer-overlay] [data-trigger-menu] [role="listbox"]')) return;
+      try { DshNative.onBridgeMessage(JSON.stringify({kind:'dismiss-keyboard',keepFocus:true})); } catch (_) {}
+    });
+  });
   new MutationObserver(function(records) {
     if (offset <= 0) return;
     records.forEach(function(record) { record.addedNodes.forEach(positionMenus); });

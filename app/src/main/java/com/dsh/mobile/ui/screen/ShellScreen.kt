@@ -426,10 +426,10 @@ fun ShellScreen(
                 business = health
 
             }
-            override fun onDismissKeyboard() {
+            override fun onDismissKeyboard(keepFocus: Boolean) {
                 webViewRef?.let { view ->
                     (view.context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(view.windowToken, 0)
-                    view.clearFocus()
+                    if (!keepFocus) view.clearFocus()
                 }
             }
             override fun onSessionTitle(title: String) {
@@ -602,8 +602,9 @@ fun ShellScreen(
     ) {
         Column(Modifier.fillMaxSize()) {
             TaskStrip(
-                connectionName = settings.activeProfile?.kind?.title ?: "DSH",
+                connectionName = settings.activeProfile?.routeTitle ?: "DSH",
                 networkStatus = networkStatus,
+                pausedPlugins = if (pageLoaded) business.pausedPlugins else 0,
                 task = task,
                 connected = socketConnected,
                 progress = progress,
@@ -614,7 +615,7 @@ fun ShellScreen(
                 showActions = pageLoaded,
                 // 通道建议直接进状态条（用户要求原位替换，不新加浮层）。
                 channelSuggestion = channelSuggestion?.let { pair ->
-                    "可切到 ${pair.first.kind.title} · ${pair.second}" to pair.second
+                    "可切到 ${pair.first.routeTitle} · ${pair.second}" to pair.second
                 },
                 onAcceptChannel = {
                     val target = channelSuggestion?.first
@@ -653,7 +654,7 @@ fun ShellScreen(
                     onProgress = { progress = it },
                     // Some WebView versions report main HTTP failure before onPageStarted.
                     // Do not erase that failure and leave the loading cover spinning.
-                    onLoadStarted = { pageLoaded=false },
+                    onLoadStarted = { pageLoaded=false; business=business.copy(pausedPlugins=0) },
                     onLoadSettled = { error ->
                         loadError = error
                         if(error?.startsWith("配对凭据已失效")==true)authLost=true
@@ -814,6 +815,7 @@ fun ShellScreen(
 private fun TaskStrip(
     connectionName: String,
     networkStatus: String,
+    pausedPlugins: Int,
     task: TaskState,
     connected: Boolean,
     progress: Int,
@@ -921,6 +923,15 @@ private fun TaskStrip(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if(compact)Text(networkStatus,color=surface.onBackgroundMuted,fontSize=10.sp,maxLines=1,overflow=TextOverflow.Ellipsis)
+            }
+            if (pausedPlugins > 0) {
+                Text(
+                    "已暂停 ${pausedPlugins} 项插件",
+                    color = surface.onBackgroundMuted,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
             }
             if (task.stepTotal > 0) {
                 Text(text = "${task.step}/${task.stepTotal}", color = surface.onBackgroundMuted)

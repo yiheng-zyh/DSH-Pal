@@ -24,6 +24,26 @@ class SettingsStore(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private val prefix = if (com.dsh.mobile.BuildConfig.USB_DEVELOPMENT) "usb_" else ""
+
+    data class WebCompatibility(val originalPage: Boolean = false, val pausedPlugins: Set<String> = emptySet())
+
+    fun webCompatibility(url: String): WebCompatibility {
+        val origin = ConnectionAddress.origin(url) ?: return WebCompatibility()
+        val key = "${prefix}web_compat_$origin"
+        return WebCompatibility(
+            prefs.getBoolean("${key}_original", false),
+            prefs.getStringSet("${key}_paused", emptySet()).orEmpty().filter(WebPluginBundles::canPause).toSet(),
+        )
+    }
+
+    fun setWebCompatibility(url: String, value: WebCompatibility) {
+        val origin = ConnectionAddress.origin(url) ?: return
+        val key = "${prefix}web_compat_$origin"
+        prefs.edit {
+            putBoolean("${key}_original", value.originalPage)
+            putStringSet("${key}_paused", value.pausedPlugins.filter(WebPluginBundles::canPause).toSet())
+        }
+    }
     fun observePredictiveBack(onChange:(Boolean)->Unit):()->Unit {
         val listener=SharedPreferences.OnSharedPreferenceChangeListener { _,key->if(key=="predictive_back")onChange(predictiveBackEnabled) }
         prefs.registerOnSharedPreferenceChangeListener(listener)

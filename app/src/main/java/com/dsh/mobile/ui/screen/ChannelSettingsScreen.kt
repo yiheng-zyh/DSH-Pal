@@ -152,7 +152,7 @@ fun ChannelFailoverCard(
         ) {
             ChannelPolicy.betterDomestic(current, profiles, order, health)
         } else null
-        suggestionReason = suggestion?.let { "当前走国外中转，${it.kind.title} 直连实测可用，换过去通常更快" }.orEmpty()
+        suggestionReason = suggestion?.let { "已检测到 ${it.routeTitle} 可用，可切换到直连" }.orEmpty()
     }
 
     // 只在卡片进入时测一轮；不做常驻轮询 —— 设置页看一眼就够了，
@@ -169,7 +169,7 @@ fun ChannelFailoverCard(
             Text("通道自动选路", fontWeight = FontWeight.Medium)
             Text(
                 "当前通道完全不可用时会自动换一条能用的路（换路会重新加载页面）；" +
-                    "正常使用时不会自己动手，只在你走国外中转、而国内直连可用时提示一次。",
+                    "使用中继且有可用的直连通道时，提示手动切换。",
                 fontSize = 12.sp,
                 color = MiuixTheme.colorScheme.onBackgroundVariant,
             )
@@ -222,7 +222,7 @@ fun ChannelFailoverCard(
                 Spacer(Modifier.height(2.dp))
                 Text("优先级（长按拖动调整）", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Text(
-                    "排在前面的通道优先被自动选用。默认 局域网 → IPv6 直连 → 公网/国内中转 → Tailscale。",
+                    "排在前面的通道优先被自动选用。下方显示当前配置的顺序。",
                     fontSize = 11.sp,
                     color = MiuixTheme.colorScheme.onBackgroundVariant,
                 )
@@ -287,7 +287,7 @@ fun ChannelFailoverCard(
                         Column(Modifier.weight(1f)) {
                             Text(kind.title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Text(
-                                if (entries.isEmpty()) "未配置" else entries.joinToString("、") { it.label },
+                                if (entries.isEmpty()) "未配置" else entries.joinToString("、") { it.displayLabel },
                                 fontSize = 11.sp,
                                 color = MiuixTheme.colorScheme.onBackgroundVariant,
                                 maxLines = 1,
@@ -361,7 +361,7 @@ fun ChannelFailoverCard(
                                 settings.silenceChannelPrompt()
                                 suggestion = null
                                 onSwitchConnection(propose.id)
-                            }) { Text("切到${propose.kind.title}") }
+                            }) { Text("切到 ${propose.routeTitle}") }
                             Button(onClick = {
                                 // 拒绝一次 → 30 分钟内不再弹。落盘，App 杀掉重启也记得。
                                 settings.silenceChannelPrompt()
@@ -424,11 +424,11 @@ private fun ChannelHealthRow(
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(profile.label, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(profile.displayLabel, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 // 不可用时把原因写出来（超时 / TLS 不通 / 被服务端拒绝），
                 // 而不是只标一个红点让用户猜。
-                health?.detail?.takeIf { it.isNotBlank() } ?: profile.kind.title,
+                health?.detail?.takeIf { it.isNotBlank() } ?: profile.routeTitle,
                 fontSize = 11.sp,
                 color = MiuixTheme.colorScheme.onBackgroundVariant,
                 maxLines = 2,
@@ -508,7 +508,7 @@ fun ChannelSuggestionBar(
             Column(Modifier.weight(1f)) {
                 // 一行说完：通道名 + 理由。超长省略，绝不换行把条撑高。
                 Text(
-                    "可切到 ${target.kind.title}",
+                    "可切到 ${target.routeTitle}",
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
@@ -635,7 +635,7 @@ fun ChannelSettingsEntry(settings: SettingsStore, onClick: () -> Unit) {
                     when {
                         !settings.channelAutoSwitch -> "已关闭 · 只用手动选择的通道"
                         current == null -> "配对后自动选可用入口；当前还没有连接"
-                        else -> "当前 ${current.kind.title} · 挂了自动换一条能用的路"
+                        else -> "当前使用 ${current.routeTitle} · 断开时自动选择可用通道"
                     },
                     fontSize = 12.sp,
                     color = MiuixTheme.colorScheme.onBackgroundVariant,

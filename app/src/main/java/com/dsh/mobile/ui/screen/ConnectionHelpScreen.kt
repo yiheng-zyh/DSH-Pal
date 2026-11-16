@@ -45,10 +45,10 @@ private val guides = listOf(
         "手机端" to "连接管理 → 添加连接 → Cloudflare Tunnel → 扫码或粘贴配对链接。如果扫到的其实是已知 Relay 地址，App 会把它归到 Relay 并提示，不会悄悄混在 Tunnel 里。",
         "验证与限制" to "先用手机浏览器打开同一个地址，能出页面再回 App 扫码。日志应有 bridge ready、ws OPEN。\nQuick 地址变化属正常现象，不是插件坏了。"
     )),
-    ConnectionGuide("自建固定域名（frp / HTTPS 反代）", listOf(
+    ConnectionGuide("SAKURA FRP 与自有 HTTPS", listOf(
         "适用范围" to "已经部署好的 frp、HTTPS 反向代理，或用自己域名转发到这台电脑的方案——日常主力通常就是这一类。域名在 Cloudflare 托管，不代表实际远控路径就是 Cloudflare Tunnel；本项按你实际的转发方式走。",
         "电脑端" to "安装同一个公共远控插件；管理员提供已验证的 HTTPS 入口，将 HTTP 和 WebSocket 转发到 DSH 当前回环服务，保留配对认证。转发端口是实际部署值，不是假定端口。App 不替你修改 LAN、防火墙或插件公布地址。",
-        "手机端" to "选择自建固定域名，粘贴为此入口生成的完整配对链接。已知 Cloudflare、Relay、Tailscale 域名会自动识别；自有域名按你明确选择的类型保存。不能仅靠陌生域名自动猜出服务商。",
+        "手机端" to "扫描该入口的配对码，或选择「frp / HTTPS 反向代理」后粘贴配对链接。项目提供的 SAKURA FRP 地址会显示服务名称，自有域名按所选连接方式显示。",
         "地址变化与兼容" to "相同地址保持原凭据；新域名需首次配对。旧版混合记录里的未知域名迁入本项，不改地址和登录状态。若确认它是 Named Tunnel，可在对应入口重新保存同一地址以纠正类型，不用删旧凭据。"
     )),
     ConnectionGuide("Tailscale / WireGuard", listOf(
@@ -99,6 +99,9 @@ private val guides = listOf(
 @Composable
 fun ConnectionHelpScreen(initialKind: com.dsh.mobile.core.ConnectionProfile.Kind? = null, onBack: () -> Unit) {
     var profile by remember { mutableStateOf("desktop") }
+    var showRoutes by remember { mutableStateOf(false) }
+    var showInstall by remember { mutableStateOf(false) }
+    var showAssistant by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(when(initialKind) {
         // Index map must follow the guides list order (Relay now leads). Mismatched
         // indices here would open the wrong tutorial from every entry point.
@@ -113,27 +116,36 @@ fun ConnectionHelpScreen(initialKind: com.dsh.mobile.core.ConnectionProfile.Kind
     }) }
     com.dsh.mobile.ui.AppBackHandler { onBack() }
     Column(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background).safeDrawingPadding(),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally) {
-        Box(Modifier.widthIn(max=840.dp).fillMaxWidth().padding(20.dp)){com.dsh.mobile.ui.AppPageHeader("连接帮助",onBack=onBack)}
-        Column(Modifier.weight(1f).widthIn(max=840.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            guides.forEachIndexed { i, guide ->
-                Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { selected = i }) {
-                    Text("${if(i == selected) "●" else "○"} ${guide.name}", modifier = Modifier.padding(14.dp), color = if(i == selected) com.dsh.mobile.ui.theme.LocalDshAccents.current.accent else MiuixTheme.colorScheme.onBackground)
+        Box(Modifier.widthIn(max=680.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+            com.dsh.mobile.ui.AppPageHeader("连接帮助",onBack=onBack)
+        }
+        Column(Modifier.weight(1f).widthIn(max=680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+            SettingsGroup("连接方案") {
+                SettingsItem(guides[selected].name, if (showRoutes) "收起方案" else "选择其他方案") { showRoutes = !showRoutes }
+                if (showRoutes) guides.forEachIndexed { index, guide ->
+                    if (index != selected) {
+                        SettingsDivider()
+                        SettingsItem(guide.name, "查看配置步骤") { selected = index; showRoutes = false }
+                    }
                 }
             }
-            PluginInstallCard(profile) { profile = it }
-            AiSetupCard(selected, profile)
+            SettingsGroup("电脑端准备") {
+                SettingsItem("安装远程访问插件", if (showInstall) "收起安装步骤" else "已有远程访问入口可跳过") { showInstall = !showInstall }
+                SettingsDivider()
+                SettingsItem("让电脑上的 DSH 协助配置", if (showAssistant) "收起配置提示" else "查看并复制当前方案的提示词") { showAssistant = !showAssistant }
+            }
+            if (showInstall) PluginInstallCard(profile) { profile = it }
+            if (showAssistant) AiSetupCard(selected, profile)
             SelectionContainer {
                 Column {
                     guides[selected].sections.forEach { (title, body) ->
-                        Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(title, fontWeight = FontWeight.SemiBold)
-                                Spacer(Modifier.height(8.dp))
-                                Text(body, fontSize = 14.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                        SettingsGroup(title) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                body.lineSequence().filter { it.isNotBlank() }.forEach { SettingsHint(it) }
                             }
                         }
                     }
-                    Text("每个新地址可能需要首次配对；切回已配对地址会复用其登录状态。切换前请保存草稿。服务更新后实际回环端口可能变化。", fontSize = 12.sp, modifier = Modifier.padding(bottom = 24.dp))
+                    SettingsHint("新地址可能需要首次配对。切回已配对地址会复用登录状态。切换前请保存草稿。服务更新后，实际回环端口可能变化。", Modifier.padding(bottom = 24.dp))
                 }
             }
         }
@@ -155,7 +167,7 @@ private fun PluginInstallCard(profile: String, onProfileChange: (String) -> Unit
     Card(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Column(Modifier.padding(16.dp)) {
             Text("先在电脑安装 DSH 插件", fontWeight = FontWeight.SemiBold)
-            Text("所有路径共用这个插件，区别在配套工具。已有远程访问入口可跳过安装；尚未安装时，按你使用的 DSH 选择一条命令。", fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+            SettingsHint("按你使用的 DSH 选择安装命令。已有远程访问入口时可以跳过。", Modifier.padding(vertical = 8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf("desktop" to "桌面客户端", "web" to "dsh web").forEach { (value, title) ->
                     Text("${if(profile == value) "●" else "○"} $title", fontSize = 13.sp,
@@ -173,7 +185,7 @@ private fun PluginInstallCard(profile: String, onProfileChange: (String) -> Unit
                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DSH 插件固化命令", vendorCommand))
                 android.widget.Toast.makeText(context, "已复制，请在被控端电脑的项目目录执行", android.widget.Toast.LENGTH_SHORT).show()
-            }, modifier = Modifier.padding(vertical = 8.dp)) { Text("复制固化命令") }
+            }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) { Text("复制固化命令") }
             Text("在 DSH Pal 项目根目录执行，它会用项目自带的 0.4.14 副本装好，之后按提示执行 pnpm install。",
                 fontSize = 12.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
             Text("为什么不用网上下载：该插件的原作者已放弃维护，并声明新版不再提供本 App 依赖的浏览器远控能力。从项目自带副本安装，原作者删包也不影响你。详见项目内 docs/PLUGIN-VENDOR-GUIDE.md。",
@@ -188,7 +200,7 @@ private fun PluginInstallCard(profile: String, onProfileChange: (String) -> Unit
                 val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("DSH 插件安装命令", fallbackCommand))
                 android.widget.Toast.makeText(context, "已复制，请在被控端电脑终端执行", android.widget.Toast.LENGTH_SHORT).show()
-            }, modifier = Modifier.padding(vertical = 8.dp)) { Text("复制安装命令") }
+            }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) { Text("复制安装命令") }
             Text("电脑执行 → 确认该 DSH 已启用插件并出现远程访问入口 → 按下方方案配置 → 手机再扫码。自定义 profile 请替换命令里的名称。", fontSize = 12.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
             Text("提示找不到 dsh？先安装并启用 DSH CLI，再打开新终端；也可在桌面客户端插件管理中按完整包名安装。不要为此更改 webserver 绑定。", fontSize = 12.sp, color = MiuixTheme.colorScheme.onBackgroundVariant, modifier = Modifier.padding(top = 8.dp))
         }
@@ -215,7 +227,7 @@ private fun setupPrompt(index: Int, profile: String): String {
         2 -> """
             方案：我已有的自建固定域名转发（frp / HTTPS 反代）。先识别真实部署，不因域名托管在 Cloudflare 就认定是 Cloudflare Tunnel。
             核对 HTTPS、回环转发目标、WebSocket、配对认证和外部访问，复用已运行的入口；缺少配置先列出需要部署者提供的条件，不擅自新建公网服务或改防火墙。
-            从同一 DSH 回环签发对应入口的新配对；不要复制另一域名的 Cookie 或盲改历史二维码。手机选择自建固定域名，验证切回旧入口无需重新配对。
+            从同一 DSH 回环签发对应入口的新配对；不要复制另一域名的 Cookie 或盲改历史二维码。手机选择 frp / HTTPS 反向代理，验证切回旧入口无需重新配对。
         """
         3 -> """
             方案：优先 Tailscale Serve；若我明确使用 WireGuard，再按已有 WireGuard 网络配置。

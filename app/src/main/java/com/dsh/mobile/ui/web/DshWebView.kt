@@ -49,6 +49,7 @@ fun DshWebView(
     val loadScope=rememberCoroutineScope()
     val capabilities = rememberWebCapabilities()
     val pageReadyScript = remember { context.assets.open("page-ready.js").bufferedReader().use { it.readText() } }
+    val pluginPolicyScript = remember { context.assets.open("web-plugin-policy.js").bufferedReader().use { it.readText() } }
     // 旧 WebView JS 兼容层（issue #1：鸿蒙卓易通 Chromium < 116 缺
     // Promise.withResolvers / AbortSignal.any，页面 boot 直接 TypeError）。
     // 必须排在 document-start 串联的最前面：晚于页面内联脚本就救不回来。
@@ -129,11 +130,15 @@ fun DshWebView(
     // Latched once per navigation so a page that spams console errors still only
     // moves the stage machine a single time.
     val consoleErrorSeen = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
-    androidx.compose.runtime.LaunchedEffect(configuration.screenWidthDp,configuration.screenHeightDp,webView) { webView.evaluateJavascript(WebViewport.script(),null) }
+    androidx.compose.runtime.LaunchedEffect(configuration.screenWidthDp,configuration.screenHeightDp,webView) {
+        webView.evaluateJavascript(WebPluginCompatibility.presentation(WebViewport.script()), null)
+    }
     capabilities.view = webView
     capabilities.trustedOrigin = url
     capabilities.appearance = appearance
-    androidx.compose.runtime.LaunchedEffect(appearance, webView) { webView.evaluateJavascript(WebAppearance.script(), null) }
+    androidx.compose.runtime.LaunchedEffect(appearance, webView) {
+        webView.evaluateJavascript(WebPluginCompatibility.presentation(WebAppearance.script()), null)
+    }
 
     DisposableEffect(webView) {
         onDispose {
@@ -144,6 +149,8 @@ fun DshWebView(
     }
 
     DisposableEffect(url) {
+        val plugins = WebPluginCompatibility(url)
+        WebPluginCompatibility.attach(webView, plugins)
         val cacheNavigation = java.util.concurrent.atomic.AtomicLong(WebResourceCache.nextNavigation())
         val main = android.os.Handler(android.os.Looper.getMainLooper())
         var probeCount = 0
@@ -240,7 +247,17 @@ fun DshWebView(
         val scriptHandler = runCatching {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                polyfillScript + "\n" + WebViewport.script() + "\n" + offlineGuardScript + "\n" + BridgeScript.build(forwardEvents = true, forwardState = true) + "\n" + com.dsh.mobile.bridge.WebMotionScript.build() + "\n" + com.dsh.mobile.bridge.WebLayoutScript.build(context) + "\n" + fileScript + "\n" + WebAppearance.script() + "\n" + probeSource,
+                listOf(
+                    polyfillScript,
+                    pluginPolicyScript,
+                    WebPluginCompatibility.presentation(WebViewport.script()),
+                    offlineGuardScript,
+                    BridgeScript.build(forwardEvents = true, forwardState = true),
+                    WebPluginCompatibility.presentation(com.dsh.mobile.bridge.WebMotionScript.build() + "\n" + com.dsh.mobile.bridge.WebLayoutScript.build(context)),
+                    fileScript,
+                    WebPluginCompatibility.presentation(WebAppearance.script()),
+                    probeSource,
+                ).joinToString("\n"),
                 setOf("*"),
             )
         }.onSuccess {
@@ -270,6 +287,8 @@ fun DshWebView(
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                plugins.pageStarted()
+                injectJs(view, pluginPolicyScript, "web-plugin-policy")
                 onLoadStarted()
                 cacheNavigation.set(WebResourceCache.nextNavigation())
                 main.removeCallbacks(contentProbe)
@@ -316,7 +335,7 @@ fun DshWebView(
                 // 重试循环还会反复调 AbortSignal.any——此时补上，后续重试即可恢复。
                 if (polyfillScript.isNotBlank()) injectJs(view, polyfillScript, "webview-polyfill")
                 view.evaluateJavascript(fileScript, null)
-                view.evaluateJavascript(WebAppearance.script(), null)
+                view.evaluateJavascript(WebPluginCompatibility.presentation(WebAppearance.script()), null)
                 // Prove the JS half is actually present. If DshNative is missing the
                 // events can never arrive, so surface that instead of silently
                 // showing "connected" forever.
@@ -351,6 +370,7 @@ fun DshWebView(
                 error: android.webkit.WebResourceError?,
             ) {
                 super.onReceivedError(view, request, error)
+                if (request != null) plugins.resourceFailed(request)
                 // Only the main document failing means "the page is blank"; a
                 // subresource failing is normal on a flaky mobile link.
                 if (request?.isForMainFrame == true) {
@@ -378,6 +398,7 @@ fun DshWebView(
                 errorResponse: android.webkit.WebResourceResponse?,
             ) {
                 super.onReceivedHttpError(view, request, errorResponse)
+                if (request != null) plugins.resourceFailed(request)
                 if (request != null && !request.isForMainFrame) {
                     val path=request.url.path.orEmpty()
                     if(path.endsWith(".js") || path.endsWith(".css") || path.endsWith("/plugins/")) {
@@ -600,6 +621,7 @@ fun DshWebView(
         onWebViewReady(webView)
 
         onDispose {
+            WebPluginCompatibility.detach(webView)
             loadJob.cancel()
             main.removeCallbacksAndMessages(null)
             // 页面销毁即停止采集：不加这行，定时器会在没有 WebView 时继续空转。

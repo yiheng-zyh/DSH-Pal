@@ -69,8 +69,32 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 
 private enum class SettingsPage(val title: String) {
+    Compatibility("网页兼容与排查"),
     Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Channel("通道自动选路"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), Updates("更新与公告"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
 }
+
+private data class SettingsDestination(val page: SettingsPage?, val title: String, val detail: String, val keywords: String = "")
+
+private val settingsDestinations = listOf(
+    "连接" to listOf(
+        SettingsDestination(SettingsPage.Connection, "设备与连接", "管理已配对设备与连接通道", "配对 公网 局域网 VPN USB Tailscale WireGuard"),
+        SettingsDestination(null, "连接帮助", "查看电脑与手机的配置步骤", "教程 安装 Cloudflare Relay"),
+    ),
+    "界面与通知" to listOf(
+        SettingsDestination(SettingsPage.Appearance, "外观", "色调、网页布局和交互", "主题 背景 字体 侧栏 返回 深色 浅色"),
+        SettingsDestination(SettingsPage.Companion, "悬浮助手", "任务信息、位置和大小", "鲸鱼 悬浮窗 文字框 聊天"),
+        SettingsDestination(SettingsPage.Notifications, "通知与后台", "灵动岛、任务进度与后台连接", "权限 震动"),
+    ),
+    "网页与数据" to listOf(
+        SettingsDestination(SettingsPage.Compatibility, "网页兼容与排查", "恢复 DSH 原始网页、暂停指定插件", "遮罩 点不动 停用 诊断"),
+        SettingsDestination(SettingsPage.Cache, "缓存与数据", "查看资源复用、管理离线记录与站点数据", "网页资源 清理 Cookie 草稿"),
+    ),
+    "支持" to listOf(
+        SettingsDestination(SettingsPage.Diagnostics, "支持与诊断", "查看与导出分类日志", "反馈 问题记录"),
+        SettingsDestination(SettingsPage.Updates, "更新与公告", "检查版本、下载更新与查看公告", "升级"),
+        SettingsDestination(SettingsPage.About, "关于", "版本、开源许可与项目链接"),
+    ),
+)
 
 /**
  * Diagnostics + settings.
@@ -118,6 +142,8 @@ fun SettingsScreen(
     var showConnectionHelp by remember { mutableStateOf(false) }
     var showVpn by remember { mutableStateOf(false) }
     var selectedAppearance by remember { mutableStateOf(settings.localAppearance) }
+    var settingsQuery by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     // 局域网自动发现（2026-11-04 用户要求：「应该做成自动发现的呀」）。
     // 扫描是用户可感知的动作，所以做成显式按钮 + 进度，而不是开机偷偷扫。
     var lanScanning by remember { mutableStateOf(false) }
@@ -165,23 +191,33 @@ fun SettingsScreen(
         else if(section==SettingsPage.Updates) com.dsh.mobile.ui.BackGestureSurface {UpdatesScreen{page=SettingsPage.Home}}
         else {
         Column(Modifier.fillMaxSize().safeDrawingPadding(),horizontalAlignment=Alignment.CenterHorizontally) {
-            Column(Modifier.widthIn(max=840.dp).fillMaxWidth().padding(horizontal=20.dp,vertical=12.dp)) {
-                AppPageHeader(section.title,if(section==SettingsPage.Home) "DSH Pal ${com.dsh.mobile.BuildConfig.VERSION_NAME}" else null) { if(section==SettingsPage.Home)onBack()else page=parent() }
+            Column(Modifier.widthIn(max=680.dp).fillMaxWidth().padding(horizontal=20.dp,vertical=12.dp)) {
+                AppPageHeader(section.title) { if(section==SettingsPage.Home)onBack()else page=parent() }
             }
-        Column(Modifier.weight(1f).widthIn(max=840.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=20.dp)) {
+            if (section == SettingsPage.Home) Box(Modifier.widthIn(max = 680.dp).padding(horizontal = 20.dp)) {
+                SettingsSearch(settingsQuery) { settingsQuery = it }
+            }
+        Column(Modifier.weight(1f).widthIn(max=680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=20.dp)) {
             if (section == SettingsPage.Home) {
-                SettingsLink("连接管理", "查看当前连接 · 切换 VPN / 公网 / USB") { page = SettingsPage.Connection }
-                SettingsLink("连接帮助", "Cloudflare、Relay、自有 HTTPS 与 VPN 两端配置") { showConnectionHelp = true }
-                SettingsLink("悬浮助手", "鲸鱼娘 · 实时任务信息与大小设置") { page = SettingsPage.Companion }
-                SettingsLink("外观", "跟随 DSH 背景、深浅色预设与自定义调色盘") { page = SettingsPage.Appearance }
-                SettingsLink("通知与后台", "灵动岛、任务进度与后台连接") { page = SettingsPage.Notifications }
-                SettingsLink("缓存与加载", "自动更新与本地资源复用") { page = SettingsPage.Cache }
-                Spacer(Modifier.height(14.dp))
-                SettingsLink("支持与诊断", "分类日志与问题记录") { page = SettingsPage.Diagnostics }
-                SettingsLink("关于", "版本、开源许可与项目链接") { page = SettingsPage.About }
-                SettingsLink("更新与公告", "检查版本、下载更新与查看公告") { page = SettingsPage.Updates }
+                val query = settingsQuery.trim()
+                val results = settingsDestinations.map { (sectionTitle, items) ->
+                    sectionTitle to items.filter {
+                        "$sectionTitle ${it.title} ${it.detail} ${it.keywords}".contains(query, ignoreCase = true)
+                    }
+                }.filter { it.second.isNotEmpty() }
+                if (results.isEmpty()) SettingsHint("没有找到相关设置。")
+                for ((sectionTitle, items) in results) SettingsGroup(sectionTitle) {
+                    items.forEachIndexed { index, item ->
+                        if (index > 0) SettingsDivider()
+                        SettingsItem(item.title, item.detail) {
+                            focusManager.clearFocus()
+                            if (item.page == null) showConnectionHelp = true else page = item.page
+                        }
+                    }
+                }
             }
 
+            if(section==SettingsPage.Compatibility) WebCompatibilitySettings(settings, webView)
             if(section==SettingsPage.Companion) FloatingCompanionSettings(settings) {page=SettingsPage.CompanionStyle}
             if(section==SettingsPage.CompanionStyle) FloatingCompanionStyleSettings(settings)
             // 通道自动选路：保命切换 + 优先级排序 + 各通道实测状态。
@@ -193,38 +229,45 @@ fun SettingsScreen(
             }
 
             if(section==SettingsPage.Notifications) {
-                SettingsLink("通知选项","灵动岛、任务进度、后台连接与震动"){page=SettingsPage.NotificationControls}
-                SettingsLink("通知能力检测","查看系统支持与通知权限"){page=SettingsPage.NotificationSupport}
-                SettingsLink("通知演示","验证进度通知和媒体岛"){page=SettingsPage.NotificationDemo}
+                SettingsGroup("通知") {
+                    SettingsItem("通知选项","灵动岛、任务进度、后台连接与震动"){page=SettingsPage.NotificationControls}
+                    SettingsDivider()
+                    SettingsItem("通知能力检测","查看系统支持与通知权限"){page=SettingsPage.NotificationSupport}
+                    SettingsDivider()
+                    SettingsItem("通知演示","验证进度通知和媒体岛"){page=SettingsPage.NotificationDemo}
+                }
             }
             if (section == SettingsPage.Appearance) {
-                Text("默认沿用 DSH 自带的主题或背景；不要求安装壁纸插件。本地色调仅影响手机，不会修改被控端。", fontSize = 13.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
-                Spacer(Modifier.height(16.dp))
-                if(android.os.Build.VERSION.SDK_INT>=34) {
-                    ToggleRow("预测性返回", "页面与设置随返回手势预览；回滑取消。退出时仍需再次返回。", settings.predictiveBackEnabled) {
-                        settings.predictiveBackEnabled=it
+                SettingsGroup("交互") {
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        if(android.os.Build.VERSION.SDK_INT>=34) {
+                            ToggleRow("预测性返回", "使用返回手势时预览上一页。", settings.predictiveBackEnabled) {
+                                settings.predictiveBackEnabled=it
+                            }
+                        } else SettingsHint("预测性返回需要 Android 14 或以上。", Modifier.padding(top = 12.dp))
+                        ToggleRow("侧栏交互增强", "优化侧栏开合。出现插件冲突时可关闭。", settings.enhancedInteractions) {
+                            settings.enhancedInteractions=it
+                            webView?.evaluateJavascript("window.__DSH_INTERACTION__&&window.__DSH_INTERACTION__.setEnabled($it)",null)
+                        }
                     }
-                } else Text("预测性返回预览需要 Android 14 或以上；普通返回不受影响。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
-                Spacer(Modifier.height(12.dp))
-                ToggleRow("侧栏交互增强", "保留内容并优化开合；不支持时自动保留原交互。遇到插件冲突可关闭，不清理连接或草稿。", settings.enhancedInteractions) {
-                    settings.enhancedInteractions=it
-                    webView?.evaluateJavascript("window.__DSH_INTERACTION__&&window.__DSH_INTERACTION__.setEnabled($it)",null)
                 }
-                Spacer(Modifier.height(12.dp))
-                Text("网页布局",fontWeight=FontWeight.Medium)
                 var layout by remember {mutableStateOf(settings.webLayoutMode)}
-                com.dsh.mobile.core.WebLayoutMode.entries.forEach {mode ->
-                    SettingsLink(mode.title + if(mode==layout) " · 当前" else "",mode.detail) {
-                        layout=mode;settings.webLayoutMode=mode
-                        webView?.evaluateJavascript(com.dsh.mobile.ui.web.WebViewport.script(),null)
+                SettingsGroup("网页布局") {
+                    com.dsh.mobile.core.WebLayoutMode.entries.forEachIndexed {index, mode ->
+                        if (index > 0) SettingsDivider()
+                        SettingsItem(mode.title, mode.detail, selected = mode == layout) {
+                            layout=mode;settings.webLayoutMode=mode
+                            webView?.evaluateJavascript(com.dsh.mobile.ui.web.WebPluginCompatibility.presentation(com.dsh.mobile.ui.web.WebViewport.script()),null)
+                        }
                     }
                 }
-                Text("仅改变手机显示方式，保留连接与登录。桌面布局内容较密，建议横屏或平板；可随时切回。",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
-                Spacer(Modifier.height(18.dp))
-                Text("本地色调",fontWeight=FontWeight.Medium)
-                Spacer(Modifier.height(12.dp))
-                AppearancePicker(settings, selectedAppearance) { theme ->
-                    selectedAppearance = theme; onAppearanceChanged(theme)
+                SettingsGroup("本地色调") {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SettingsHint("可跟随 DSH 的背景，也可为手机单独设置色调。")
+                        AppearancePicker(settings, selectedAppearance) { theme ->
+                            selectedAppearance = theme; onAppearanceChanged(theme)
+                        }
+                    }
                 }
             }
             // ---- notification capability -----------------------------------
@@ -493,7 +536,7 @@ fun SettingsScreen(
                     } else {
                         Text(currentProfile.label, fontWeight = FontWeight.Medium, fontSize = 15.sp)
                         Text(
-                            "${currentProfile.kind.title} · ${settings.baseUrl}",
+                            "${currentProfile.routeTitle} · ${settings.baseUrl}",
                             fontSize = 12.sp,
                             color = MiuixTheme.colorScheme.onBackgroundVariant,
                             maxLines = 2,
@@ -649,8 +692,8 @@ fun SettingsScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text("${if (current) "●" else "○"} ${profile.label}", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                                    Text(profile.kind.title, fontSize = 12.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                                    Text("${if (current) "●" else "○"} ${profile.displayLabel}", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                    if (profile.displayLabel != profile.routeTitle) SettingsHint(profile.routeTitle)
                                     Text(if (profile.lastUsedAt > 0) "上次连接：" + java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(profile.lastUsedAt)) else "尚未确认连接", fontSize = 11.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
                                 }
                                 if (current) Text("当前", color = LocalDshAccents.current.accent)
@@ -766,16 +809,7 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsLink(title: String, subtitle: String, onClick: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(bottom = 10.dp).pressClickable(onClick = onClick)) {
-        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                Spacer(Modifier.height(5.dp))
-                Text(subtitle, fontSize = 12.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
-            }
-            Text("›", fontSize = 26.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
-        }
-    }
+    Card(Modifier.fillMaxWidth().padding(bottom = 10.dp)) { SettingsItem(title, subtitle, onClick = onClick) }
 }
 
 @Composable
@@ -797,24 +831,28 @@ private fun StatusRow(label: String, value: String, ok: Boolean) {
 }
 
 @Composable
-private fun ToggleRow(    title: String,
+internal fun ToggleRow(
+    title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onChange: (Boolean) -> Unit,
 ) {
     var value by remember(checked) { mutableStateOf(checked) }
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 15.sp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, fontSize = 16.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium)
             if (subtitle.isNotBlank()) {
-                Text(subtitle, fontSize = 12.sp, color = MiuixTheme.colorScheme.onBackgroundVariant)
+                SettingsHint(subtitle)
             }
         }
         Spacer(Modifier.width(12.dp))
-        Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) { Switch(checked = value, onCheckedChange = { value = it; onChange(it) }) }
+        Box(Modifier.width(56.dp), contentAlignment = Alignment.CenterEnd) {
+            Switch(checked = value, enabled = enabled, onCheckedChange = { value = it; onChange(it) })
+        }
     }
 }
 

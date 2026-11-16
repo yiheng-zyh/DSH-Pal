@@ -52,6 +52,11 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
     @JavascriptInterface fun hasPendingTransfer(): Boolean = download != null || upload != null || audio != null
     @JavascriptInterface fun webLayoutMode(): String = com.dsh.mobile.core.SettingsStore(context).webLayoutMode.name
     @JavascriptInterface fun enhancedInteractions(): Boolean = com.dsh.mobile.core.SettingsStore(context).enhancedInteractions
+    @JavascriptInterface fun originalDshPage(): Boolean =
+        com.dsh.mobile.core.SettingsStore(context).webCompatibility(trustedOrigin).originalPage
+    @JavascriptInterface fun pausedWebPlugins(): String = org.json.JSONArray(
+        com.dsh.mobile.core.SettingsStore(context).webCompatibility(trustedOrigin).pausedPlugins,
+    ).toString()
     // AUTO 模式据此决定桌面/手机布局。必须看「当前窗口宽度」而不是设备短边：
     // 平板竖屏短边 720dp≥600 会恒判桌面，把 720dp 的屏强行按 1024 CSS 宽排版，
     // 整体缩到 0.70×，触摸目标与正文随之缩小（实测 69/69 目标 <40dp、正文 11.3dp）。

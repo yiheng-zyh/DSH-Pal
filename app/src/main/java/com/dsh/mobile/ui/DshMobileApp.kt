@@ -106,7 +106,7 @@ fun DshMobileApp(
         if(switching)return
         val previous=settings.activeProfile
         switching=true
-        switchStage="正在准备 ${target.kind.title} 连接"
+        switchStage="正在准备 ${target.routeTitle} 连接"
         com.dsh.mobile.core.RunLog.info("Connection","switch begin from=${previous?.kind} to=${target.kind} target=${target.id.take(8)}")
         switchJob=switchScope.launch {
             try {

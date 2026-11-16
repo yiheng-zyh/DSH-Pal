@@ -3,6 +3,7 @@
   var policy=window.__DSH_INTERACTION__,ignored='[data-dsh-mobile-keep-layout]';
   var mobile=matchMedia('(max-width:900px) and (pointer:coarse)'),reduced=matchMedia('(prefers-reduced-motion:reduce)');
   var frame=null,rail=null,entry=null,observer=null,animation=null,closing=false,shown=false,generation=0,timer=null,active=false,intentUntil=0;
+  var replayingNativeClose=false;
   function isolate(node,on){if(policy)policy.isolate(node,on);else if(node)node.inert=on;}
   function stop(){generation++;clearTimeout(timer);timer=null;if(animation)animation.cancel();animation=null;closing=false;if(rail)rail.removeAttribute('data-dsh-right-moving');}
   function nativeOpen(){var p=rail&&rail.querySelector('[data-sidebar-right-open]');return !!p&&p.getAttribute('data-sidebar-right-open')==='true';}
@@ -18,6 +19,15 @@
   function finishClose(){if(active&&frame&&rail&&rail.isConnected&&nativeOpen()){frame.setAttribute('data-dsh-right-closed','');isolate(rail,true);}}
   function close(immediate){
     if(!active||!mobile.matches||!frame||!frame.hasAttribute('data-dsh-mobile-right-open'))return false;
+    // DSH must release its fullscreen layout before the conversation can be used.
+    if(frame.hasAttribute('data-rightbar-fullscreen')){
+      var button=control();
+      if(!button||!button.isConnected||button.disabled)return false;
+      stop();
+      replayingNativeClose=true;
+      try{button.click();}finally{replayingNativeClose=false;}
+      return true;
+    }
     if(closing&&!immediate)return true;
     stop();closing=true;var token=generation,target=rail;
     if(immediate){finishClose();closing=false;return true;}
@@ -69,7 +79,10 @@
     var b=e.target.closest('button,a,[role="tab"]');
     if(b&&e.isTrusted&&!rail.contains(b)&&!b.closest('[data-dsh-mobile-sidebar]'))intentUntil=performance.now()+1000;
     if(e.target.closest('[data-sidebar-right-expand],[data-dsh-open-right],button[aria-label^="在侧边栏"]')){open();return;}
-    if(b&&b===control()&&nativeOpen()){e.preventDefault();e.stopImmediatePropagation();close();}
+    if(b&&b===control()&&nativeOpen()&&!replayingNativeClose){
+      if(frame.hasAttribute('data-rightbar-fullscreen')){stop();return;}
+      e.preventDefault();e.stopImmediatePropagation();close();
+    }
   },true);
   document.addEventListener('dsh-mobile-capabilities',bind);document.addEventListener('dsh-interaction-policy',bind);
   if(policy)policy.listen(mobile,bind);else mobile.addEventListener('change',bind);

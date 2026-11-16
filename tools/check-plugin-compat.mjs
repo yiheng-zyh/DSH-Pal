@@ -81,6 +81,16 @@ async function check(sources,mediaSource){
     assert('right local close retains content and releases touch',root.hasAttribute('data-dsh-right-closed')&&declared.getAttribute('data-sidebar-right-open')==='true'&&outer.inert&&w.getComputedStyle(outer).display==='none');
     assert('right local close does not replay upstream action',nativeCloses===0);
     w.__DSH_PHONE_RIGHT__.open();await pause(550);assert('right local reopen restores interaction',!root.hasAttribute('data-dsh-right-closed')&&!outer.inert&&root.hasAttribute('data-dsh-mobile-right-open'));
+    root.setAttribute('data-rightbar-fullscreen','');
+    const chat=root.querySelector('[data-dsh-mobile-center]');
+    chat.hidden=true;
+    closing.onclick=()=>{nativeCloses++;root.removeAttribute('data-rightbar-fullscreen');declared.setAttribute('data-sidebar-right-open','false');chat.hidden=false;};
+    closing.click();await pause(120);
+    assert('fullscreen task uses native collapse and reveals the conversation',nativeCloses===1&&!chat.hidden&&!outer.inert&&!root.hasAttribute('data-dsh-right-closed'));
+    root.setAttribute('data-rightbar-fullscreen','');declared.setAttribute('data-sidebar-right-open','true');chat.hidden=true;await pause(120);
+    w.__DSH_PHONE_RIGHT__.close(true);await pause(120);
+    assert('programmatic fullscreen close restores the conversation once',nativeCloses===2&&!chat.hidden&&!root.hasAttribute('data-rightbar-fullscreen'));
+    nativeCloses=0;declared.setAttribute('data-sidebar-right-open','true');await pause(120);
     closing.click();await pause(500);w.__DSH_INTERACTION__.setEnabled(false);await pause(100);
     assert('compatibility switch aligns native closed state and removes owned entry',nativeCloses===1&&declared.getAttribute('data-sidebar-right-open')==='false'&&!root.hasAttribute('data-dsh-right-closed')&&!outer.inert&&!w.document.querySelector('.dsh-mobile-right-entry'));
     w.__DSH_INTERACTION__.setEnabled(true);await pause(100);declared.setAttribute('data-sidebar-right-open','true');await pause(550);

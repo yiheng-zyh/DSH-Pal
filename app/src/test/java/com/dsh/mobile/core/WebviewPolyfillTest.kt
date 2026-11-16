@@ -49,7 +49,8 @@ class WebviewPolyfillTest {
     @Test fun wiredIntoBothInjectionPaths() {
         val host = File(moduleDir, "src/main/java/com/dsh/mobile/ui/web/DshWebView.kt").readText()
         // document-start 串联的最前面（先于页面 boot 脚本）。
-        assertTrue(host.contains("polyfillScript + \"\\n\" + WebViewport.script()"))
+        val registration = host.substringAfter("WebViewCompat.addDocumentStartJavaScript(")
+        assertTrue(Regex("listOf\\(\\s*polyfillScript,").containsMatchIn(registration))
         // onPageStarted 双保险：卓易通上 document-start 整条静默失效，
         // 只有 evaluateJavascript 路径被实测证明能跑（bridge probe ok）。
         assertTrue(host.contains("injectJs(view, polyfillScript, \"webview-polyfill\")"))

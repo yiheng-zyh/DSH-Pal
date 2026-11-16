@@ -110,7 +110,7 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
                     Card(Modifier.fillMaxWidth().padding(bottom=18.dp)) {
                         Column(Modifier.padding(18.dp), verticalArrangement=Arrangement.spacedBy(10.dp)) {
                             Text("扫插件二维码即可连接", fontSize=18.sp, fontWeight=FontWeight.Medium)
-                            Text("国内 HTTPS、Relay 与 Cloudflare 入口均自动识别，无需先选择通道。", fontSize=13.sp, color=colors.onBackgroundVariant)
+                            Text("SAKURA FRP、Relay 与 Cloudflare Tunnel 均可扫码连接。", fontSize=13.sp, color=colors.onBackgroundVariant)
                             Button(onClick={error=null;scanner=true},modifier=Modifier.fillMaxWidth()) { Text("扫码连接") }
                             error?.let { Text(it,color=LocalDshAccents.current.error,fontSize=13.sp) }
                         }
@@ -157,7 +157,7 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
                                 }
                                 else if(onConnectionRequested!=null)onConnectionRequested(profile.baseUrl,profile.label,profile.kind,profile.meshProvider)
                                 else if(settings.activateProfile(profile.id)) onPaired(profile.baseUrl)
-                            }) { Text("${profile.label} · ${profile.kind.title}", modifier=Modifier.padding(16.dp)) }
+                            }) { Text(listOf(profile.displayLabel, profile.routeTitle).distinct().joinToString(" · "), modifier=Modifier.padding(16.dp)) }
                         }
                     }
                 } else {
@@ -260,7 +260,7 @@ fun OnboardingScreen(settings: SettingsStore, onPaired: (String) -> Unit, onCanc
                         context.startActivity(android.content.Intent.createChooser(intent,"导出连接诊断"))
                     }.onFailure { error="日志导出失败，请稍后重试"; RunLog.error("Export","failed ${it.javaClass.simpleName}") } }
                 }.padding(bottom=14.dp))
-                Text("二维码是配对方式，里面的实际地址决定通道。Cloudflare Tunnel、Relay 与自建固定域名分开保存；App 不会为了切换而改写电脑入口。", fontSize=12.sp, color=colors.onBackgroundVariant)
+                Text("配对码内的地址决定连接通道。SAKURA FRP、Cloudflare Tunnel 和 Relay 的入口分别保存。", fontSize=12.sp, color=colors.onBackgroundVariant)
             }
             Spacer(Modifier.height(24.dp))
         }

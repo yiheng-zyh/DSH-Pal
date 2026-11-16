@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ConnectionProfilesTest {
+    @Test fun sakuraUsesProviderNameForNewAndExistingProfiles() {
+        val sakura = ConnectionProfile.create("", ConnectionProfile.Kind.CUSTOM, "https://fixture.nyat.app:12345")
+        assertEquals("SAKURA FRP", sakura.routeTitle)
+        assertEquals("SAKURA FRP", sakura.copy(label = "自建固定域名").displayLabel)
+        assertEquals("工作电脑", sakura.copy(label = "工作电脑").displayLabel)
+        val generic = ConnectionProfile.create("", ConnectionProfile.Kind.CUSTOM, "https://nyat.app.example.test")
+        assertEquals(ConnectionProfile.Kind.CUSTOM.title, generic.routeTitle)
+    }
     @Test fun knownPublicRoutesUseExactSuffixesAndOtherHostsStayCustom() {
         assertEquals(ConnectionProfile.Kind.TUNNEL,ConnectionAddress.infer("https://fixture.trycloudflare.com/pair-accept?pair=secret"))
         assertEquals(ConnectionProfile.Kind.RELAY,ConnectionAddress.infer("https://fixture.dsh-market.com"))
