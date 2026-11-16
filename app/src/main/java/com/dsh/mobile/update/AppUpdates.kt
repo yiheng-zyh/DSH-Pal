@@ -17,7 +17,9 @@ import okhttp3.*
 
 data class UpdateState(val checking:Boolean=false,val checkedAt:Long=0,val message:String="尚未检查更新",val release:AppRelease?=null,
                        val announcements:List<AppAnnouncement> = emptyList(),val announcementMessage:String="",val downloading:Boolean=false,
-                       val downloaded:Long=0,val readyFile:File?=null,val downloadMessage:String="",val automatic:Boolean=true,val previews:Boolean=true,val popups:Boolean=true,val readRevision:Int=0)
+                       val downloaded:Long=0,val readyFile:File?=null,val downloadMessage:String="",val automatic:Boolean=true,val previews:Boolean=true,val popups:Boolean=true,val readRevision:Int=0,
+                       /** 远程更新说明；null 表示未配置或拉取失败，调用方回退到 APK 内置文本。 */
+                       val releaseNotes:String?=null)
 
 /** App-owned update state; no DSH Cookie, pairing credential or VPN setting is involved. */
 class AppUpdates private constructor(context:Context) {
@@ -35,7 +37,10 @@ class AppUpdates private constructor(context:Context) {
 
     init{
         runCatching { preferences.getString("announcement_cache",null)?.let { json->
-            mutable.update{it.copy(announcements=AppAnnouncement.parse(json,BuildConfig.VERSION_CODE.toLong()))}
+            mutable.update{it.copy(
+                announcements=AppAnnouncement.parse(json,BuildConfig.VERSION_CODE.toLong()),
+                releaseNotes=AppAnnouncement.parseReleaseNotes(json),
+            )}
         }}
     }
     fun configure(automatic:Boolean=state.value.automatic,previews:Boolean=state.value.previews,popups:Boolean=state.value.popups){
@@ -73,15 +78,17 @@ class AppUpdates private constructor(context:Context) {
                     mirror!=null->{releaseMessage="发现新版本 ${mirror.version}（国内下载）";mirror}
                     else->null
                 }
-                var news:List<AppAnnouncement>?=null;var newsMessage=""
+                var news:List<AppAnnouncement>?=null;var newsMessage="";var remoteNotes:String?=null
                 try{
                     val json=text(AppLinks.ANNOUNCEMENTS,128*1024)
                     news=AppAnnouncement.parse(json,BuildConfig.VERSION_CODE.toLong())
+                    remoteNotes=AppAnnouncement.parseReleaseNotes(json)
                     preferences.edit().putString("announcement_cache",json).apply()
                 }catch(e:Exception){newsMessage=if(e is MissingFeed)"公告源尚未发布，保留已缓存公告"else "公告暂时不可用，保留已缓存公告"}
                 mutable.update { old->old.copy(checking=false,checkedAt=now,release=release,readyFile=old.readyFile?.takeIf{old.release?.id==release?.id&&old.release?.sha256==release?.sha256},
                     message=releaseMessage,
-                    announcements=news?:old.announcements,announcementMessage=newsMessage) }
+                    announcements=news?:old.announcements,announcementMessage=newsMessage,
+                    releaseNotes=remoteNotes ?: old.releaseNotes) }
             }catch(e:Exception){
                 mutable.update{it.copy(checking=false,message=if(e is RateLimited)"检查过于频繁，请稍后重试或打开发布页"else "暂时无法检查更新，请检查网络后重试")}
             }finally{checking.set(false)}
@@ -121,9 +128,15 @@ class AppUpdates private constructor(context:Context) {
             out.toString("UTF-8")
         }
     }
-    fun download(){
+    /** 下载通道：Auto 沿用旧的择优逻辑（蓝奏云优先，失败回退 GitHub）；其余强制走指定通道。 */
+    enum class Channel { Auto, Lanzou, Github }
+
+    fun download(channel:Channel=Channel.Auto){
         val release=state.value.release?:return
         if((!release.downloadable&&!release.hasLanzou)||downloading?.isActive==true)return
+        // 指定通道不可用时直接给出明确提示，不静默改走另一条。
+        if(channel==Channel.Lanzou&&!release.hasLanzou){mutable.update{it.copy(downloadMessage="本版本未提供蓝奏云下载")};return}
+        if(channel==Channel.Github&&!release.downloadable){mutable.update{it.copy(downloadMessage="本版本未提供 GitHub 下载")};return}
         cancelled.set(false)
         mutable.update{it.copy(downloading=true,downloaded=0,readyFile=null,downloadMessage="正在下载，离开页面仍可继续；结束 App 会中断")}
         downloading=scope.launch{
@@ -131,9 +144,9 @@ class AppUpdates private constructor(context:Context) {
                 val directory=File(app.cacheDir,"app-updates")
                 val saved=File(directory,"update.apk")
                 val file=if(UpdateDownload.matches(saved,release.apkSize,release.sha256!!))saved else{
-                    // 优先蓝奏云（国内快）；解析或下载失败再回退 GitHub。
+                    // Auto：蓝奏云优先（国内快），失败回退 GitHub；指定通道时不回退。
                     var received=false
-                    if(release.hasLanzou){
+                    if(release.hasLanzou&&channel!=Channel.Github){
                         mutable.update{it.copy(downloadMessage="正在从蓝奏云解析下载地址…")}
                         val resolved=runCatching{LanzouResolver.resolve(app,release.lanzouUrl!!,release.lanzouPassword.orEmpty(),release.apkName?:"DSH-Pal-${release.version}.apk")}.getOrNull()
                         if(resolved!=null){
@@ -147,8 +160,11 @@ class AppUpdates private constructor(context:Context) {
                                     }}
                                 }
                                 received=true
-                            }.onFailure{ mutable.update{it.copy(downloadMessage="蓝奏云下载中断，切换 GitHub 重试…")} }
-                        }
+                            }.onFailure{
+                                if(channel==Channel.Lanzou)throw IOException("蓝奏云下载失败，请稍后重试或改用 GitHub")
+                                mutable.update{it.copy(downloadMessage="蓝奏云下载中断，切换 GitHub 重试…")}
+                            }
+                        }else if(channel==Channel.Lanzou)throw IOException("蓝奏云地址解析失败，请稍后重试或改用 GitHub")
                     }
                     if(!received){
                         kotlin.check(release.apkUrl!=null){"暂无可用下载源，请稍后重试或从发布页下载"}

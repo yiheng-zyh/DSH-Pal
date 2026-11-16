@@ -35,7 +35,9 @@ fun UpdatesScreen(onBack:()->Unit){
     var installing by remember{mutableStateOf(false)}
     var actionMessage by remember{mutableStateOf("")}
     var confirmDownload by remember{mutableStateOf(false)}
-    val localNotes=remember{context.assets.open("app-release-notes.txt").bufferedReader().use{it.readText()}}
+    // 优先用远程更新说明（改文案不必重新打包），拉不到时回退到 APK 内置文本。
+    val bundledNotes=remember{runCatching{context.assets.open("app-release-notes.txt").bufferedReader().use{it.readText()}}.getOrDefault("")}
+    val localNotes=state.releaseNotes?.takeIf{it.isNotBlank()} ?: bundledNotes
     AppBackHandler{onBack()}
     fun open(url:String){runCatching{context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}.onFailure{actionMessage="无法打开浏览器，请稍后重试"}}
     Box(Modifier.fillMaxSize().background(MiuixTheme.colorScheme.background).safeDrawingPadding(),contentAlignment=Alignment.TopCenter){
