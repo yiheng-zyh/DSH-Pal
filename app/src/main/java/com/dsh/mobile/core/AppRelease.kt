@@ -18,9 +18,12 @@ object AppLinks {
     }.getOrDefault(false)
 }
 
-data class ReleaseVersion(val numbers:List<Long>,val pre:List<String>):Comparable<ReleaseVersion> {
+data class ReleaseVersion(val numbers:List<Long>,val pre:List<String>,val revision:Long=0):Comparable<ReleaseVersion> {
     override fun compareTo(other:ReleaseVersion):Int {
         numbers.indices.forEach { i->val c=numbers[i].compareTo(other.numbers[i]);if(c!=0)return c }
+        // 同一 x.y.z 内的「中途改动」小版本：0.1.3v2 (revision=2) > 0.1.3 (revision=0)。
+        // 放在 1.0.0-rc 这类预发布之前比较，避免把补丁版判成预发布。
+        val rc=revision.compareTo(other.revision);if(rc!=0)return rc
         if(pre.isEmpty()||other.pre.isEmpty())return when{pre.isEmpty()&&other.pre.isEmpty()->0;pre.isEmpty()->1;else->-1}
         for(i in 0 until minOf(pre.size,other.pre.size)){
             val a=pre[i];val b=other.pre[i];val na=a.toLongOrNull();val nb=b.toLongOrNull()
@@ -30,8 +33,18 @@ data class ReleaseVersion(val numbers:List<Long>,val pre:List<String>):Comparabl
         return pre.size.compareTo(other.pre.size)
     }
     companion object {
+        /**
+         * 接受两种写法：
+         *   1. 语义化版本 `1.2.3` / `1.2.3-rc.1` / `v1.2.3`
+         *   2. 「中途改动」小版本 `1.2.3v2`（作者习惯写法，等价于 1.2.3 revision=2，
+         *      排序时高于 1.2.3、低于 1.2.4）
+         */
         fun parse(raw:String):ReleaseVersion?=runCatching {
             require(raw.length<=128)
+            val small=Regex("^v?(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})[vV]([1-9][0-9]{0,6})$").matchEntire(raw)
+            if(small!=null){
+                return ReleaseVersion((1..3).map{small.groupValues[it].toLong()},emptyList(),small.groupValues[4].toLong())
+            }
             val m=Regex("^v?(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$").matchEntire(raw)?:return null
             val pre=m.groupValues[4].takeIf{it.isNotBlank()}?.split('.')?:emptyList()
             require(pre.all{it.isNotEmpty()&&!(it.all(Char::isDigit)&&it.length>1&&it.startsWith('0'))&&(!it.all(Char::isDigit)||it.length<=9)})

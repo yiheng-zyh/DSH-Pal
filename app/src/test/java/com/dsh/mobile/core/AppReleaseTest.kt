@@ -61,4 +61,23 @@ class AppReleaseTest {
         assertNull(AppRelease.fromDownloadJson(JSONObject().put("version","0.2.0").put("sha256",sha).toString(),"0.1.1"))
         assertNull(AppRelease.fromDownloadJson("not json","0.1.1"))
     }
+
+    @Test fun midRevisionVersionsSortAboveBaseAndBelowNextPatch() {
+        val base = ReleaseVersion.parse("0.1.3")!!
+        val v2 = ReleaseVersion.parse("0.1.3v2")!!
+        val next = ReleaseVersion.parse("0.1.4")!!
+        // 0.1.3 < 0.1.3v2 < 0.1.4
+        assertTrue(base < v2)
+        assertTrue(v2 < next)
+        // 同号不同 revision 可区分
+        assertTrue(v2 > base)
+        assertEquals(0, v2.compareTo(ReleaseVersion.parse("0.1.3v2")!!))
+        // 常规语义化版本不受影响
+        assertTrue(ReleaseVersion.parse("0.1.3-alpha.1")!! < base)
+        assertTrue(ReleaseVersion.parse("v0.1.3")!!.compareTo(base) == 0)
+        // 非法写法仍返回 null
+        assertNull(ReleaseVersion.parse("0.1.3v0"))
+        assertNull(ReleaseVersion.parse("0.1.3x2"))
+        assertNull(ReleaseVersion.parse("0.1"))
+    }
 }
