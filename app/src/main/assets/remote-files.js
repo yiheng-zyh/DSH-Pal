@@ -113,7 +113,9 @@
     controls.style.cssText = 'display:flex;gap:8px;margin-top:14px';
     var generation = 0, busy = false;
     function message(value) { status.textContent = value; }
-    function fail(error) { message(error.message || '操作失败，请重试'); }
+    function fail(error) {
+      message(error.name === 'TimeoutError' ? '读取文件超时，请检查连接后点「刷新」重试' : error.message || '操作失败，请重试');
+    }
     function fileItem(path, label, value) {
       var item = document.createElement('div');
       item.setAttribute('data-pal-session-file', '');
