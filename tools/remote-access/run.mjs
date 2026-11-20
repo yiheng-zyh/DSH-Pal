@@ -9,6 +9,7 @@ import {createGateway} from './gateway.mjs';
 import {applyTrustedHost} from './trust.mjs';
 import {advertisableAddresses,planDirectEntries} from './direct.mjs';
 import tls from 'node:tls';
+import {writeGatewayState} from './state.mjs';
 
 const directory=dataDirectory();
 const config=validateConfig(JSON.parse(await fs.readFile(path.join(directory,'config.json'),'utf8')));
@@ -25,6 +26,7 @@ let token;
 let lastTrustCheck=0;
 let lastTrustKey='';
 let lastDirectKey='';
+let lastStateWriteWarning=0;
 // Reuse only a previously recorded port as a discovery hint, never as a
 // trusted target. findDshPort fingerprints it again before forwarding.
 let preferredPort=config.dshPort;
@@ -201,8 +203,11 @@ async function update(){
   const value={updatedAt:new Date().toISOString(),pid:process.pid,targetAvailable:targetPort!==null,
     targetPort,clientState,clientReason,publicOrigin:published,customOrigin:config.customOrigin??null,businessVerified:false,...gateway.snapshot(),
     direct:directStates};
-  const temporary=path.join(directory,`state-${process.pid}.tmp`);
-  await fs.writeFile(temporary,JSON.stringify(value,null,2));await fs.rename(temporary,path.join(directory,'state.json'));
+  const saved=await writeGatewayState(directory,value);
+  if(!saved.ok&&Date.now()-lastStateWriteWarning>60000){
+    lastStateWriteWarning=Date.now();
+    console.warn(`Gateway status write failed (${saved.code}); the tunnel remains active and the next update will retry.`);
+  }
 }
 async function stop(){
   if(stopping)return;stopping=true;if(child)child.kill();await gateway.close();

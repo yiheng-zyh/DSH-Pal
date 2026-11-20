@@ -9,6 +9,30 @@ import {createGateway} from './gateway.mjs';
 import {validateConfig} from './config.mjs';
 
 const publicOrigin='https://gateway.example.test:18443';
+
+test('file metadata opt-in preserves backend authentication and strips its private query', async () => {
+  const seen = [];
+  const value = {result: {ok: true, value: {absolutePath: '/fixture/nonexistent', version: 'opaque'}}};
+  const f = await fixture((req, res) => {
+    seen.push({url: req.url, encoding: req.headers['accept-encoding']});
+    const status = req.headers.cookie ? 200 : 401;
+    const body = JSON.stringify(status === 200 ? value : {error: 'authentication-required'});
+    res.writeHead(status, {'content-type': 'application/json', 'content-length': Buffer.byteLength(body)});
+    res.end(body);
+  });
+  try {
+    const route = '/remote/api/workspaceFiles/stat?pal_file_metadata=1';
+    const denied = await request(f, route, {method: 'POST'});
+    assert.equal(denied.status, 401);
+    assert.deepEqual(JSON.parse(denied.body), {error: 'authentication-required'});
+    const allowed = await request(f, route, {method: 'POST', headers: {cookie: 'seat=fixture'}});
+    assert.equal(allowed.status, 200);
+    assert.deepEqual(JSON.parse(allowed.body), value);
+    assert.equal(seen.at(-1).url, '/remote/api/workspaceFiles/stat');
+    assert.equal(seen.at(-1).encoding, 'identity');
+    assert.equal(allowed.headers['cache-control'], 'no-store');
+  } finally { await f.close(); }
+});
 async function fixture(handler){
   const sockets=new Set();
   const backend=http.createServer(handler);

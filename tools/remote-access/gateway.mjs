@@ -4,6 +4,7 @@ import os from 'node:os';
 import {pipeline} from 'node:stream';
 import {origin,port} from './config.mjs';
 import {egoEventsOnly} from './ego-events.mjs';
+import {fileMetadataTransform} from './file-metadata.mjs';
 import {canRecoverLanding,unavailableLanding} from './unavailable.mjs';
 
 /**
@@ -200,7 +201,7 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
     // 第二字节被换掉），App 的隧道状态因此恒为 UNKNOWN，每 10 秒记一条 warn。
     // 这里让上游对这一个端点回明文，注入逻辑就工作在真正的 JSON 上；
     // 其余请求的压缩照旧透传，一行不改。
-    if(!upgrade&&pathname(req.url)==='/api/pair/status'){
+    if(!upgrade&&(pathname(req.url)==='/api/pair/status'||/^\/(?:remote\/)?api\/workspaceFiles\/stat$/.test(pathname(req.url)||'')&&new URL(req.url,allowedOrigin).searchParams.get('pal_file_metadata')==='1')){
       headers['accept-encoding']='identity';
       delete headers['content-encoding'];
     }
@@ -241,13 +242,15 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
       const parsed=new URL(req.url,allowedOrigin);
       const eventBudget=/^\/(?:remote\/)?api\/ego\/stream$/.test(parsed.pathname)&&parsed.searchParams.get('dsh_events_only')==='1';
       if(eventBudget)parsed.searchParams.delete('dsh_events_only');
+      const fileMetadata=req.method==='POST'&&/^\/(?:remote\/)?api\/workspaceFiles\/stat$/.test(parsed.pathname)&&parsed.searchParams.get('pal_file_metadata')==='1';
+      if(fileMetadata)parsed.searchParams.delete('pal_file_metadata');
       res.once('close',()=>{statistics.active--;statistics.completed++;statistics.lastDurationMs=Date.now()-started;});
       // /api/pair/status 是 App 唯一会主动拉取的诊断端点（配对前后都会请求）。
       // 在这里注入网关与隧道的真实状态，用户才能在 App 里看到「隧道挂了 + 原因」，
       // 而不是只看得到「已收到业务响应」却不知道外部通道其实没工作。
       // 只改写这一个 JSON 响应，其余请求照旧透传，不影响 DSH 自身协议。
       const injectDiagnostics=parsed.pathname==='/api/pair/status'&&req.method!=='HEAD';
-      const upstream=http.request({host:'127.0.0.1',port:localPort,path:eventBudget?parsed.pathname+parsed.search:req.url,method:req.method,headers:upstreamHeaders(req),agent},reply=>{
+      const upstream=http.request({host:'127.0.0.1',port:localPort,path:eventBudget||fileMetadata?parsed.pathname+parsed.search:req.url,method:req.method,headers:upstreamHeaders(req),agent},reply=>{
         if(pathname(req.url)?.startsWith('/remote/')){
           statistics.remoteResponses++;if(reply.statusCode>=400)statistics.remoteErrors++;
         }
@@ -298,6 +301,16 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
             res.writeHead(reply.statusCode,{...headers,'content-length':Buffer.byteLength(body)});
             res.end(body);
           });
+          return;
+        }
+        if(fileMetadata&&reply.statusCode===200&&!reply.headers['content-encoding']&&String(reply.headers['content-type']).includes('application/json')){
+          const headers=stripHop(reply.headers);
+          delete headers['content-length'];delete headers.etag;
+          headers['cache-control']='no-store';
+          res.writeHead(200,headers);
+          const metadata=fileMetadataTransform();
+          metadata.on('data',chunk=>{statistics.responseBytes+=chunk.length;meter.responseBytes+=chunk.length;});
+          pipeline(reply,metadata,res,()=>{});
           return;
         }
         // Preserve status, body, compression, cookies, CSP, cache policy and response length.

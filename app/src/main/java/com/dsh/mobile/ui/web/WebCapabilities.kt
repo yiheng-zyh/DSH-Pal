@@ -153,6 +153,7 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
     fun destinationChosen(result: Int, uri: Uri?) {
         val job = download ?: return
         if (result != Activity.RESULT_OK || uri?.scheme != "content") { finishDownload(false, cancelled = true); return }
+        notifyUser("正在保存文件，请保持页面连接")
         if (job.token != null) {
             scope.launch(Dispatchers.IO) {
                 runCatching {

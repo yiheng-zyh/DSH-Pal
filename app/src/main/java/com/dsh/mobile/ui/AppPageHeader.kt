@@ -21,7 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-enum class AppActionIcon { Back, Refresh, Settings }
+enum class AppActionIcon { Back, Refresh, Settings, Download }
 
 /** Native vector strokes: no icon font, extra dependency or per-theme bitmaps. */
 @Composable
@@ -32,6 +32,16 @@ fun AppIconButton(icon:AppActionIcon,label:String,onClick:()->Unit, tint:Color=M
         Canvas(Modifier.size(22.dp)) {
             val w=size.width;val h=size.height;val stroke=1.8.dp.toPx()
             when(icon) {
+                AppActionIcon.Download -> {
+                    drawLine(ink,androidx.compose.ui.geometry.Offset(w*.5f,h*.12f),androidx.compose.ui.geometry.Offset(w*.5f,h*.64f),stroke,StrokeCap.Round)
+                    drawLine(ink,androidx.compose.ui.geometry.Offset(w*.29f,h*.45f),androidx.compose.ui.geometry.Offset(w*.5f,h*.66f),stroke,StrokeCap.Round)
+                    drawLine(ink,androidx.compose.ui.geometry.Offset(w*.71f,h*.45f),androidx.compose.ui.geometry.Offset(w*.5f,h*.66f),stroke,StrokeCap.Round)
+                    val tray=Path().apply {
+                        moveTo(w*.18f,h*.64f);lineTo(w*.18f,h*.86f)
+                        lineTo(w*.82f,h*.86f);lineTo(w*.82f,h*.64f)
+                    }
+                    drawPath(tray,ink,style=Stroke(stroke,cap=StrokeCap.Round))
+                }
                 AppActionIcon.Back -> {
                     drawLine(ink,androidx.compose.ui.geometry.Offset(w*.78f,h*.5f),androidx.compose.ui.geometry.Offset(w*.2f,h*.5f),stroke,StrokeCap.Round)
                     drawLine(ink,androidx.compose.ui.geometry.Offset(w*.2f,h*.5f),androidx.compose.ui.geometry.Offset(w*.48f,h*.22f),stroke,StrokeCap.Round)

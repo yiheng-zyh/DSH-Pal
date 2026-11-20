@@ -612,6 +612,13 @@ fun ShellScreen(
                 unifiedBackground = appearance != "dsh",
                 onOpenDiagnostics = onOpenDiagnostics,
                 onReload = onReloadPage,
+                onDownloadFile = {
+                    webViewRef?.let { view ->
+                        if (com.dsh.mobile.core.WebFilePolicy.sameOrigin(view.url.orEmpty(), settings.baseUrl)) {
+                            view.evaluateJavascript("window.__DSH_REMOTE_FILES__&&window.__DSH_REMOTE_FILES__.open()", null)
+                        }
+                    }
+                },
                 showActions = pageLoaded,
                 // 通道建议直接进状态条（用户要求原位替换，不新加浮层）。
                 channelSuggestion = channelSuggestion?.let { pair ->
@@ -823,6 +830,7 @@ private fun TaskStrip(
     unifiedBackground: Boolean = false,
     onOpenDiagnostics: () -> Unit,
     onReload: () -> Unit,
+    onDownloadFile: () -> Unit,
     showActions:Boolean,
     // 通道建议：null 表示没有建议，第二行照常显示 networkStatus。
     // 2026-11-04 用户要求：「整合到状态栏上面…需要提醒的时候就切换提醒界面，
@@ -938,6 +946,7 @@ private fun TaskStrip(
             }
             Spacer(Modifier.width(12.dp))
             if(showActions) {
+                com.dsh.mobile.ui.AppIconButton(com.dsh.mobile.ui.AppActionIcon.Download,"下载文件到手机",onDownloadFile,tint=surface.onBackground)
                 com.dsh.mobile.ui.AppIconButton(com.dsh.mobile.ui.AppActionIcon.Refresh,"刷新",onReload,tint=surface.onBackground)
                 Spacer(Modifier.width(2.dp))
                 com.dsh.mobile.ui.AppIconButton(com.dsh.mobile.ui.AppActionIcon.Settings,"设置",onOpenDiagnostics,tint=surface.onBackground)

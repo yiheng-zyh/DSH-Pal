@@ -2,14 +2,25 @@
   if (window.top !== window || window.__DSH_FILE_SEND__) return;
   var authority = '__DSH_FILE_AUTHORITY__';
   var exports = new Map();
+  window.__DSH_OFFER_REMOTE_FILE__ = function(source, name) {
+    var token = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
+    exports.set(token, source);
+    if (!DshFiles.offerBlob(authority, token, name, 'application/octet-stream', source.size)) {
+      exports.delete(token);
+      throw Error('已有文件正在保存，或文件超过 512 MB');
+    }
+  };
   window.__DSH_FILE_DROP__ = function(token) { exports.delete(token); };
   window.__DSH_FILE_SEND__ = async function(token) {
     var blob = exports.get(token), success = false;
     if (!blob) { DshFiles.endBlob(token, false); return; }
     try {
-      for (var offset = 0; offset < blob.size; offset += 49152) {
-        var bytes = new Uint8Array(await blob.slice(offset, offset + 49152).arrayBuffer());
-        if (!DshFiles.writeChunk(token, btoa(String.fromCharCode.apply(null, bytes)))) throw Error('write failed');
+      for (var offset = 0; offset < blob.size; offset += 262144) {
+        var bytes = blob.read ? await blob.read(offset, Math.min(262144, blob.size - offset)) :
+          new Uint8Array(await blob.slice(offset, offset + 262144).arrayBuffer());
+        for (var chunk = 0; chunk < bytes.length; chunk += 49152) {
+          if (!DshFiles.writeChunk(token, btoa(String.fromCharCode.apply(null, bytes.subarray(chunk, chunk + 49152))))) throw Error('write failed');
+        }
       }
       success = true;
     } catch (_) {} finally { DshFiles.endBlob(token, success); exports.delete(token); }
