@@ -282,6 +282,15 @@
 }
 [data-dsh-mobile-sidebar-scroll] > [class$="_panelList"] { order:3!important; }
 [data-dsh-mobile-sidebar-scroll] > [class$="_footArea"] { order:4!important; }
+/* Keep the workspace's flex chain bounded by the reserved area. Newer DSH
+   layouts size the root from its contents and render listArea as a block,
+   which leaves the tree taller than its clipped ancestors. */
+[data-dsh-mobile-frame]:not([data-sidebar-collapsed]) [data-dsh-mobile-workspace] [class$="_root"]:has([role="tree"]) {
+  flex:1 1 0!important; min-height:0!important; max-height:100%!important;
+}
+[data-dsh-mobile-frame]:not([data-sidebar-collapsed]) [data-dsh-mobile-workspace] [class$="_listArea"]:has([role="tree"]) {
+  display:flex!important; min-height:0!important;
+}
 [data-dsh-mobile-workspace] :is([role="tree"],[data-workspace-tree],[data-conversations-list]) {
   overflow-y:auto!important; overflow-x:hidden!important; overscroll-behavior-y:auto;
   min-height:0!important; scrollbar-width:thin; touch-action:pan-y;
