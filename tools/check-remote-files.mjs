@@ -2,8 +2,9 @@ import {readFileSync} from 'node:fs';
 
 const source = readFileSync(new URL('../app/src/main/assets/remote-files.js', import.meta.url), 'utf8')
   .replace('window.top !== window', 'false');
+const sessionSource = readFileSync(new URL('../app/src/main/assets/session-files.js', import.meta.url), 'utf8');
 
-async function verify(source) {
+async function verify(source, sessionSource) {
   const frame = document.createElement('iframe');
   frame.srcdoc = '<div role="treeitem" aria-selected="true" data-row-key="session:fixture-session"></div>';
   document.body.append(frame);
@@ -20,10 +21,10 @@ async function verify(source) {
     const request = JSON.parse(options.body);
     calls.push(request);
     const args = request.payload.args;
-    if (request.method.endsWith('/list')) return valueResponse({
-      path: args.path === '.' ? '' : args.path,
-      entries: [{name: 'fixture.bin', type: 'file'}], truncated: false,
-    });
+    if (request.method === 'session/projections') return valueResponse({asOfSeq: 20});
+    if (request.method === 'session/page') return valueResponse({cursor: 0, hasMore: false, records: [
+      {event: {type: 'deliverables/presented', seq: 10, time: 1000, data: {files: args.request.address.sessionId === 'different-session' ? [{path: 'only-other.bin'}] : [{path: 'fixture.bin'}, {path: 'second.pdf'}]}}}
+    ]});
     if (request.method.endsWith('/stat')) return valueResponse({
       absolutePath: args.path, version, bytes: 3, ...(includeTime ? {modifiedAt: '2025-04-03T09:26:00Z'} : {}),
     });
@@ -44,9 +45,11 @@ async function verify(source) {
     pluginStyle.textContent = 'dialog {background:transparent!important;opacity:.1!important}';
     page.document.head.append(pluginStyle);
     page.eval(source);
+    page.eval(sessionSource);
     page.__DSH_REMOTE_FILES__.open();
     await wait();
-    assert('workspace root uses a nonempty API path', calls[0].payload.args.path === '.');
+    assert('file list reads the selected conversation and avoids workspace directory scans',
+      calls.some(call => call.method === 'session/page' && call.payload.args.request.address.sessionId === 'fixture-session') && !calls.some(call => call.method === 'workspaceFiles/list'));
     assert('dialog has an opaque surface independent of transparent page colors',
       page.getComputedStyle(dialog()).backgroundColor === 'rgb(242, 244, 247)' && page.getComputedStyle(dialog()).opacity === '1');
     await wait();
@@ -64,11 +67,30 @@ async function verify(source) {
     let changed = false;
     try { await offered.source.read(0, 3); } catch (_) { changed = true; }
     assert('changed file version is rejected', changed);
+    let previewAddress;
+    page.__dshSidebarModuleSystem__ = {entries: {managed: new Map([
+      ['@deepseek-ai/dsh-client-ui-chat', {ctx: {get: name => name === 'sidebarRight' ? {openResource: address => { previewAddress = address; }} : null}}]
+    ])}};
+    page.__DSH_REMOTE_FILES__.open(); await wait();
+    click('在侧栏预览 second.pdf');
+    assert('file title opens the existing DSH sidebar resource navigator', previewAddress === 'dsh-resource://file/session/fixture-session/second.pdf' && !dialog());
+    page.__DSH_REMOTE_FILES__.open(); await wait();
+    const selected = page.document.querySelector('[role=treeitem]');
+    selected.setAttribute('data-row-key', 'session:different-session');
+    selected.setAttribute('aria-selected', 'false');
+    selected.setAttribute('aria-selected', 'true');
+    await wait();
+    assert('switching conversation dismisses the old file list', !dialog());
+    page.__DSH_REMOTE_FILES__.open(); await wait();
+    assert('next conversation lists its own files without prior conversation results',
+      dialog().textContent.includes('only-other.bin') && !dialog().textContent.includes('fixture.bin'));
+    click('关闭');
     const node = page.document.createElement('div');
     node.setAttribute('data-textpreview-url', 'dsh-resource://file/session/other-session/folder/%E6%96%87%E4%BB%B6.pdf?line=5');
     node.innerHTML = '<div><span data-textpreview-path></span></div>';
     page.document.body.append(node);
     await wait();
+    page.document.querySelector('[role=treeitem]').setAttribute('data-row-key', 'session:other-session');
     node.querySelector('[data-pal-download]').click();
     assert('preview decodes the original path without view parameters',
       dialog().querySelector('[role=status]').textContent === 'folder/文件.pdf');
@@ -100,7 +122,7 @@ const result = await new Promise(resolve => {
     if (reply.id === 1) resolve(reply.result);
   };
   socket.send(JSON.stringify({id: 1, method: 'Runtime.evaluate', params: {
-    expression: '(' + verify.toString() + ')(' + JSON.stringify(source) + ')',
+    expression: '(' + verify.toString() + ')(' + JSON.stringify(source) + ',' + JSON.stringify(sessionSource) + ')',
     awaitPromise: true, returnByValue: true,
   }}));
 });

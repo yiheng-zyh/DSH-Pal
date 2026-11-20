@@ -79,6 +79,7 @@ fun DshWebView(
     val resourceProbeScript = remember { com.dsh.mobile.core.PageProbeScript.resourceProbe() }
     val fileScript = remember {
         context.assets.open("web-files.js").bufferedReader().use { it.readText() }.replace("__DSH_FILE_AUTHORITY__", capabilities.exportAuthority) + "\n" +
+            context.assets.open("session-files.js").bufferedReader().use { it.readText() } + "\n" +
             context.assets.open("remote-files.js").bufferedReader().use { it.readText() } + "\n" +
             context.assets.open("web-media.js").bufferedReader().use { it.readText() } + "\n" + context.assets.open("ego-stream-budget.js").bufferedReader().use { it.readText() } + "\n" + context.assets.open("business-health.js").bufferedReader().use { it.readText() }
     }

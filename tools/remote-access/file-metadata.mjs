@@ -17,11 +17,15 @@ export async function addFileModifiedTime(document) {
 }
 
 export function fileMetadataTransform() {
+  return jsonResponseTransform(addFileModifiedTime);
+}
+
+export function jsonResponseTransform(map, limit = 65536) {
   let chunks = [], length = 0, passthrough = false;
   return new Transform({
     transform(chunk, encoding, done) {
       length += chunk.length;
-      if (!passthrough && length > 65536) {
+      if (!passthrough && length > limit) {
         passthrough = true;
         for (const part of chunks) this.push(part);
         chunks = [];
@@ -36,7 +40,7 @@ export function fileMetadataTransform() {
       let document;
       try { document = JSON.parse(raw.toString('utf8')); }
       catch { this.push(raw); done(); return; }
-      addFileModifiedTime(document).then(value => {
+      Promise.resolve().then(() => map(document)).then(value => {
         this.push(JSON.stringify(value));
         done();
       }, () => { this.push(raw); done(); });

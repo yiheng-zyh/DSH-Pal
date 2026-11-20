@@ -39,10 +39,20 @@
     return typeof value === 'string' ? value : value && typeof value.text === 'function' ? value.text() : '';
   }
   function selectedSession() {
+    var current = clientService('uiSession');
+    var key = current && current.adapter.current.getSnapshot().key;
+    if (typeof key === 'string' && key) return key;
     var rows = document.querySelectorAll('[role="treeitem"][aria-selected="true"][data-row-key]');
     if (rows.length !== 1) return null;
     var key = rows[0].getAttribute('data-row-key');
     return key.startsWith('session:') ? key.slice(8) : null;
+  }
+  function clientService(name) {
+    try {
+      var modules = window.__dshSidebarModuleSystem__;
+      var entry = modules && modules.entries.managed.get('@deepseek-ai/dsh-client-ui-chat');
+      return entry && entry.ctx.get(name);
+    } catch (_) { return null; }
   }
   function button(label, action) {
     var item = document.createElement('button');
@@ -63,18 +73,14 @@
   }
   function close() {
     if (dialog && dialog.fileObserver) dialog.fileObserver.disconnect();
+    if (dialog && dialog.fileRequest) dialog.fileRequest.abort();
+    if (dialog && dialog.sessionWatch) dialog.sessionWatch.disconnect();
+    if (dialog && dialog.stopSessionWatch) dialog.stopSessionWatch();
     if (dialog) dialog.remove();
     dialog = null;
   }
   function open(file) {
     if (dialog) return;
-    if (!file) {
-      var previews = Array.from(document.querySelectorAll('[data-textpreview-url]')).filter(function(node) {
-        var rect = node.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && getComputedStyle(node).visibility === 'visible';
-      });
-      if (previews.length === 1) file = previewFile(previews[0]);
-    }
     var session = file && file.session || selectedSession();
     var host = document.createElement('dialog');
     host.setAttribute('aria-label', '下载文件到手机');
@@ -93,9 +99,9 @@
     backdrop.textContent = '[data-pal-file-dialog]::backdrop{background:rgba(0,0,0,.65)!important}';
     host.append(backdrop);
     var heading = document.createElement('h2');
-    heading.textContent = '下载文件到手机'; heading.style.cssText = 'font-size:18px;margin:0 0 8px';
+    heading.textContent = file ? '下载文件到手机' : '当前对话的文件'; heading.style.cssText = 'font-size:18px;margin:0 0 8px';
     var note = document.createElement('p');
-    note.textContent = '选择文件后，在系统窗口选择手机保存位置。';
+    note.textContent = '点文件名在侧栏预览，点「下载」保存到手机。';
     note.style.cssText = 'margin:0 0 12px;font-size:13px';
     note.style.color = palette.muted;
     var status = document.createElement('p');
@@ -105,21 +111,43 @@
     list.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:48dvh;overflow:auto;overscroll-behavior:contain;touch-action:pan-y';
     var controls = document.createElement('div');
     controls.style.cssText = 'display:flex;gap:8px;margin-top:14px';
-    var currentPath = '', generation = 0, busy = false;
+    var generation = 0, busy = false;
     function message(value) { status.textContent = value; }
     function fail(error) { message(error.message || '操作失败，请重试'); }
     function fileItem(path, label, value) {
-      var item = button(label, function() { save(path); });
-      item.setAttribute('aria-label', label);
-      var title = document.createElement('span');
-      title.textContent = label;
-      title.style.display = 'block';
+      var item = document.createElement('div');
+      item.setAttribute('data-pal-session-file', '');
+      item.style.cssText = 'flex-shrink:0;border:1px solid #8886;border-radius:12px;padding:12px;overflow-wrap:anywhere';
+      var name = path.replace(/\\/g, '/').split('/').pop();
+      var title = button(name, function() {
+        try {
+          if (selectedSession() !== session) throw Error('对话已切换，请重新打开文件列表');
+          var sidebar = clientService('sidebarRight');
+          if (!sidebar || typeof sidebar.openResource !== 'function') throw Error('当前 DSH 未提供侧栏预览，请更新电脑端后重试');
+          var normalized = path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '');
+          var address = 'dsh-resource://file/session/' + encodeURIComponent(session) + '/' + normalized.split('/').map(encodeURIComponent).join('/');
+          sidebar.openResource(address);
+          close();
+          if (window.__DSH_PHONE_RIGHT__) window.__DSH_PHONE_RIGHT__.open();
+        } catch (error) { fail(error); }
+      });
+      title.setAttribute('aria-label', '在侧栏预览 ' + name);
+      title.style.cssText += ';display:block;width:100%;border:0;padding:0;font-weight:600';
+      item.append(title);
+      var description = document.createElement('div');
+      description.textContent = value.description || path.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
+      description.style.cssText = 'font-size:12px;line-height:1.6;margin-top:4px';
+      description.style.color = palette.muted;
+      if (description.textContent) item.append(description);
       var detail = document.createElement('span');
       detail.setAttribute('data-pal-file-meta', '');
       detail.textContent = value.modifiedAt ? fileDetails(value) : '正在读取修改时间…';
       detail.style.cssText = 'display:block;margin-top:6px;font-size:12px;line-height:1.6';
       detail.style.color = palette.muted;
-      item.replaceChildren(title, detail);
+      var download = button('下载', function() { save(path); });
+      download.setAttribute('aria-label', label);
+      download.style.cssText += ';margin-top:10px;padding:6px 14px';
+      item.append(detail, download);
       return {item: item, detail: detail, path: path};
     }
     function loadFileDetails(items, token) {
@@ -150,10 +178,12 @@
     }
     async function save(path) {
       if (busy) return;
+      if (selectedSession() !== session) { message('对话已切换，请重新打开文件列表'); return; }
       busy = true;
       try {
         message('正在检查文件…');
         var stat = (await rpc(session, 'stat', path)).value;
+        if (dialog !== host || selectedSession() !== session) return;
         if (!Number.isSafeInteger(stat.bytes) || stat.bytes < 0 || stat.bytes > 536870912) {
           throw Error('当前支持保存不超过 512 MB 的文件');
         }
@@ -176,46 +206,34 @@
       } catch (error) { fail(error); }
       finally { busy = false; }
     }
-    async function browse(path) {
+    async function loadConversation() {
       var token = ++generation;
       if (host.fileObserver) host.fileObserver.disconnect();
-      message('正在读取文件列表…');
+      if (host.fileRequest) host.fileRequest.abort();
+      host.fileRequest = new AbortController();
+      message('正在读取当前对话的文件记录…');
       list.replaceChildren();
       try {
-        var value = (await rpc(session, 'list', path)).value;
-        if (dialog !== host || token !== generation) return;
-        currentPath = value.path === '.' ? '' : value.path;
-        if (currentPath) list.append(button('返回上一级', function() {
-          browse(currentPath.split('/').slice(0, -1).join('/'));
-        }));
-        var files = [];
-        value.entries.forEach(function(entry) {
-          var child = (currentPath ? currentPath + '/' : '') + entry.name;
-          if (entry.type === 'directory') list.append(button('文件夹 · ' + entry.name, function() { browse(child); }));
-          if (entry.type === 'file') {
-            var row = fileItem(child, '下载 · ' + entry.name, entry);
-            list.append(row.item);
-            if (!entry.modifiedAt) files.push(row);
-          }
+        var files = await window.__DSH_SESSION_FILES__.list(session, host.fileRequest.signal, function(items) {
+          if (dialog === host && token === generation) message('正在读取历史记录，已找到 ' + items.length + ' 个文件…');
         });
-        loadFileDetails(files, token);
-        message((currentPath || '工作区') + (value.truncated ? ' · 列表较长，仅显示部分文件' : value.entries.length ? '' : ' · 空文件夹'));
+        if (dialog !== host || token !== generation) return;
+        var rows = files.map(function(entry) {
+          var row = fileItem(entry.path, '下载 · ' + entry.path.replace(/\\/g, '/').split('/').pop(), entry);
+          list.append(row.item);
+          return row;
+        });
+        loadFileDetails(rows, token);
+        message(files.length ? '当前对话共 ' + files.length + ' 个文件' : '这条对话还没有记录到生成或交付的文件。');
       } catch (error) { if (dialog === host && token === generation) fail(error); }
     }
-    var pathEntry = document.createElement('details');
-    var summary = document.createElement('summary');
-    summary.textContent = '按电脑文件路径下载';
-    summary.style.cssText = 'padding:10px 0;cursor:pointer';
-    var input = document.createElement('input');
-    input.type = 'text'; input.placeholder = '粘贴电脑上的完整文件路径';
-    input.setAttribute('aria-label', '电脑文件路径');
-    input.style.cssText = 'box-sizing:border-box;width:100%;padding:10px;margin:0 0 8px;border:1px solid #8888;border-radius:8px;background:transparent;color:inherit;font:inherit';
-    pathEntry.append(summary, input, button('下载此路径的文件', function() {
-      var path = input.value.trim();
-      if (path && session) save(path);
-    }));
-    controls.append(button('刷新', function() { if (session) browse(currentPath); }), button('关闭', close));
-    host.append(heading, note, status, list, pathEntry, controls);
+    controls.append(button('刷新', function() {
+      if (!session) return;
+      if (file && file.path) {
+        loadFileDetails([row], generation);
+      } else loadConversation();
+    }), button('关闭', close));
+    host.append(heading, note, status, list, controls);
     dialog = host;
     document.body.append(host);
     host.addEventListener('cancel', function(event) { event.preventDefault(); close(); });
@@ -225,8 +243,16 @@
       var row = fileItem(file.path, '下载到手机', {});
       list.append(row.item);
       loadFileDetails([row], generation);
-    } else if (session) browse('');
-    else message('请先在主界面打开一条对话，再下载该会话工作区内的文件。');
+    } else if (session) loadConversation();
+    else message('请先在主界面打开一条对话，再查看它生成的文件。');
+    host.sessionWatch = new MutationObserver(function() {
+      if (session && selectedSession() !== session) close();
+    });
+    host.sessionWatch.observe(document, {subtree: true, attributes: true, attributeFilter: ['aria-selected']});
+    var currentSource = clientService('uiSession');
+    if (currentSource) host.stopSessionWatch = currentSource.adapter.current.subscribe(function() {
+      if (session && selectedSession() !== session) close();
+    });
   }
   function previewFile(node) {
     var raw = node.getAttribute('data-textpreview-url') || '';
