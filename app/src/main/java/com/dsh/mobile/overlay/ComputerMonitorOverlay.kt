@@ -86,19 +86,56 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         if(rings)header.addView(label(16f).apply {text=if(expanded)"−" else "+";setPadding(0,0,0,0);gravity=Gravity.CENTER;contentDescription=if(expanded)"收起性能详情" else "展开性能详情";setOnClickListener{toggleExpanded()}},LinearLayout.LayoutParams(dp(24),dp(headerHeight)))
         if(expanded)header.addView(label(14f).apply {text="↗";setPadding(0,0,0,0);gravity=Gravity.CENTER;contentDescription="打开完整电脑性能页面";setOnClickListener{openFullMonitor()}},LinearLayout.LayoutParams(dp(28),dp(headerHeight)))
         header.addView(label(18f).apply {text="×";gravity=Gravity.CENTER;contentDescription="关闭性能悬浮窗";setOnClickListener{settings.computerMonitorOverlay=false;reconcile()}},LinearLayout.LayoutParams(dp(if(vertical)32 else 40),dp(headerHeight)))
-        var downX=0f;var downY=0f;var oldX=0;var oldY=0;var moved=false
-        heading!!.setOnTouchListener {_,e->
-            when(e.actionMasked){
-                MotionEvent.ACTION_DOWN->{downX=e.rawX;downY=e.rawY;oldX=p.x;oldY=p.y;moved=false}
-                MotionEvent.ACTION_MOVE->{val dx=e.rawX-downX;val dy=e.rawY-downY;if(kotlin.math.abs(dx)+kotlin.math.abs(dy)>dp(8))moved=true
-                    if(moved){p.x=(oldX+dx).roundToInt().coerceIn(0,maxOf(0,b.width()-p.width));p.y=(oldY+dy).roundToInt().coerceIn(dp(24),maxOf(dp(24),b.height()-p.height-dp(24)));runCatching{wm.updateViewLayout(box,p)}}}
-                MotionEvent.ACTION_UP->{if(moved){settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()}
-                    else if(rings)toggleRingOrientation() else toggleExpanded()}
-            };true
+        heading!!.setOnClickListener {if(rings)toggleRingOrientation() else toggleExpanded()}
+        // All non-scrollable panel surfaces share one gesture owner. Moving cancels
+        // both the pending long press and the eventual click, including after a hold.
+        val touchSlop=ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+        var downX=0f;var downY=0f;var oldX=0;var oldY=0
+        var moved=false;var held=false;var active=false
+        var heldView:View?=null
+        val longPress=Runnable {
+            val target=heldView
+            if(active&&!moved&&root===box&&target?.isAttachedToWindow==true) {
+                held=true;target.performLongClick()
+            }
         }
+        fun cancelHold(){heldView?.removeCallbacks(longPress);heldView=null}
+        val dragTouch=View.OnTouchListener {view,event->
+            when(event.actionMasked){
+                MotionEvent.ACTION_DOWN->{
+                    cancelHold();downX=event.rawX;downY=event.rawY;oldX=p.x;oldY=p.y
+                    moved=false;held=false;active=true
+                    if(view.isLongClickable){heldView=view;view.postDelayed(longPress,ViewConfiguration.getLongPressTimeout().toLong())}
+                }
+                MotionEvent.ACTION_MOVE->if(active){
+                    val dx=event.rawX-downX;val dy=event.rawY-downY
+                    if(!moved&&dx*dx+dy*dy>touchSlop*touchSlop){moved=true;cancelHold()}
+                    if(moved){
+                        p.x=(oldX+dx).roundToInt().coerceIn(0,maxOf(0,b.width()-p.width))
+                        p.y=(oldY+dy).roundToInt().coerceIn(dp(24),maxOf(dp(24),b.height()-p.height-dp(24)))
+                        runCatching{wm.updateViewLayout(box,p)}
+                    }
+                }
+                MotionEvent.ACTION_UP->{
+                    cancelHold()
+                    if(active){
+                        active=false
+                        if(moved){settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()}
+                        else if(!held)view.performClick()
+                    }
+                }
+                MotionEvent.ACTION_CANCEL,MotionEvent.ACTION_POINTER_DOWN->{
+                    cancelHold();active=false
+                    if(moved){settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()}
+                }
+            }
+            true
+        }
+        heading!!.setOnTouchListener(dragTouch)
+        box.setOnTouchListener(dragTouch)
         box.addView(header)
         graph=Graph(context).apply {
-            this.rings=rings;this.vertical=vertical;metric=curveMetric;gpuId=selectedGpuId;contentDescription="${metric.title}曲线，点按切换指标，长按切换显卡"
+            this.rings=rings;this.vertical=vertical;metric=curveMetric;gpuId=selectedGpuId;contentDescription=if(rings)"性能圆环，滑动拖动，点按切换横竖，长按切换显卡" else "${metric.title}曲线，滑动拖动，点按切换指标，长按切换显卡"
             setOnLongClickListener {
                 val gpus=ComputerPerformance.state.value.current?.gpus.orEmpty()
                 if(gpus.isNotEmpty()){val index=gpus.indexOfFirst{it.id==(selectedGpuId?:gpus.firstOrNull()?.id)};selectedGpuId=gpus[(index+1)%gpus.size].id;gpuId=selectedGpuId;render(ComputerPerformance.state.value)}
@@ -109,6 +146,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
                 else {curveMetric=ComputerMetric.entries[(curveMetric.ordinal+1)%ComputerMetric.entries.size];metric=curveMetric;gpuId=selectedGpuId;contentDescription="${metric.title}曲线，点按切换";invalidate()}
             }
         }
+        graph!!.setOnTouchListener(dragTouch)
         if(vertical) {
             val body=LinearLayout(context).apply{orientation=LinearLayout.HORIZONTAL}
             body.addView(graph,LinearLayout.LayoutParams(dp(if(expanded)64 else 76),-1))
