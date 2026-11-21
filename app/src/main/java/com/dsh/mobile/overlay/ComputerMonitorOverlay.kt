@@ -26,6 +26,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     private var token:Any?=null
     private var updates:Job?=null
     private var renderedStyle="curve"
+    private var renderedVertical=false
     private var expanded=false
     private var gpuInstance:String?=null
     private var selectedGpuId:String?=null
@@ -46,7 +47,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     }
     fun reconcile() {
         if(!settings.computerMonitorOverlay||!Settings.canDrawOverlays(context)||!context.getSystemService(android.os.PowerManager::class.java).isInteractive||context.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked){remove();return}
-        if(root!=null && renderedStyle!=settings.computerMonitorStyle)remove()
+        if(root!=null && (renderedStyle!=settings.computerMonitorStyle || renderedVertical!=settings.computerMonitorRingVertical)){expanded=false;remove()}
         if(root!=null)return
         build()
         if(root==null)return
@@ -59,19 +60,24 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     private fun label(size:Float)=TextView(context).apply {textSize=size;setTextColor(Color.WHITE);setPadding(dp(10),dp(5),dp(10),dp(5))}
     private fun build() {
         val b=bounds();val rings=settings.computerMonitorStyle=="rings";renderedStyle=settings.computerMonitorStyle
-        val compactWidth=if(rings)300 else 206;val compactHeight=if(rings)124 else 92
-        val p=params?:WindowManager.LayoutParams(dp(if(expanded)330 else compactWidth),if(expanded)minOf(dp(360),b.height()-dp(40)) else dp(compactHeight),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        val vertical=rings&&settings.computerMonitorRingVertical;renderedVertical=settings.computerMonitorRingVertical
+        val compactWidth=if(vertical)84 else if(rings)300 else 206
+        val compactHeight=if(vertical)268 else if(rings)124 else 92
+        val windowHeight=minOf(dp(if(expanded){if(vertical)288 else 360}else compactHeight),maxOf(dp(120),b.height()-dp(48)))
+        val expandedWidth=if(vertical)256 else 330
+        val headerHeight=if(vertical)32 else 40
+        val p=params?:WindowManager.LayoutParams(dp(if(expanded)expandedWidth else compactWidth),windowHeight,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,android.graphics.PixelFormat.TRANSLUCENT).apply {
             gravity=Gravity.TOP or Gravity.LEFT
             x=(settings.computerMonitorX*b.width()).roundToInt();y=(settings.computerMonitorY*b.height()).roundToInt()
         }.also{params=it}
-        p.width=minOf(dp(if(expanded)330 else compactWidth),b.width()-dp(20));p.height=if(expanded)minOf(dp(360),b.height()-dp(40)) else dp(compactHeight)
+        p.width=minOf(dp(if(expanded)expandedWidth else compactWidth),b.width()-dp(20));p.height=windowHeight
         p.x=p.x.coerceIn(0,maxOf(0,b.width()-p.width));p.y=p.y.coerceIn(dp(24),maxOf(dp(24),b.height()-p.height-dp(24)))
         val box=LinearLayout(context).apply {orientation=LinearLayout.VERTICAL;background=GradientDrawable().apply{setColor(Color.rgb(30,34,43));cornerRadius=dp(20).toFloat();setStroke(dp(1),Color.rgb(74,82,96))};elevation=dp(8).toFloat();setPadding(dp(4),dp(4),dp(4),dp(4))}
         val header=LinearLayout(context)
-        heading=label(12f).apply {contentDescription="拖动性能悬浮窗，点按展开或收起"}
-        header.addView(heading,LinearLayout.LayoutParams(0,dp(40),1f))
-        header.addView(label(18f).apply {text="×";gravity=Gravity.CENTER;contentDescription="关闭性能悬浮窗";setOnClickListener{settings.computerMonitorOverlay=false;reconcile()}},LinearLayout.LayoutParams(dp(40),dp(40)))
+        heading=label(if(vertical&&!expanded)11f else 12f).apply {isSingleLine=true;ellipsize=android.text.TextUtils.TruncateAt.END;contentDescription="拖动性能悬浮窗，点按展开或收起"}
+        header.addView(heading,LinearLayout.LayoutParams(0,dp(headerHeight),1f))
+        header.addView(label(18f).apply {text="×";gravity=Gravity.CENTER;contentDescription="关闭性能悬浮窗";setOnClickListener{settings.computerMonitorOverlay=false;reconcile()}},LinearLayout.LayoutParams(dp(if(vertical)32 else 40),dp(headerHeight)))
         var downX=0f;var downY=0f;var oldX=0;var oldY=0;var moved=false
         heading!!.setOnTouchListener {_,e->
             when(e.actionMasked){
@@ -79,28 +85,43 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
                 MotionEvent.ACTION_MOVE->{val dx=e.rawX-downX;val dy=e.rawY-downY;if(kotlin.math.abs(dx)+kotlin.math.abs(dy)>dp(8))moved=true
                     if(moved){p.x=(oldX+dx).roundToInt().coerceIn(0,maxOf(0,b.width()-p.width));p.y=(oldY+dy).roundToInt().coerceIn(dp(24),maxOf(dp(24),b.height()-p.height-dp(24)));runCatching{wm.updateViewLayout(box,p)}}}
                 MotionEvent.ACTION_UP->{if(moved){settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()}
-                    else {expanded=!expanded;runCatching{wm.removeView(box)};root=null;build();render(ComputerPerformance.state.value)}}
+                    else toggleExpanded()}
             };true
         }
         box.addView(header)
         graph=Graph(context).apply {
-            this.rings=rings;metric=curveMetric;gpuId=selectedGpuId;contentDescription="${metric.title}曲线，点按切换指标，长按切换显卡"
+            this.rings=rings;this.vertical=vertical;metric=curveMetric;gpuId=selectedGpuId;contentDescription="${metric.title}曲线，点按切换指标，长按切换显卡"
             setOnLongClickListener {
                 val gpus=ComputerPerformance.state.value.current?.gpus.orEmpty()
                 if(gpus.isNotEmpty()){val index=gpus.indexOfFirst{it.id==(selectedGpuId?:gpus.firstOrNull()?.id)};selectedGpuId=gpus[(index+1)%gpus.size].id;gpuId=selectedGpuId;render(ComputerPerformance.state.value)}
                 true
             }
-            setOnClickListener {curveMetric=ComputerMetric.entries[(curveMetric.ordinal+1)%ComputerMetric.entries.size];this.rings=rings;metric=curveMetric;gpuId=selectedGpuId;contentDescription="${metric.title}曲线，点按切换";invalidate()}
+            setOnClickListener {
+                if(rings)toggleExpanded()
+                else {curveMetric=ComputerMetric.entries[(curveMetric.ordinal+1)%ComputerMetric.entries.size];metric=curveMetric;gpuId=selectedGpuId;contentDescription="${metric.title}曲线，点按切换";invalidate()}
+            }
         }
-        box.addView(graph,LinearLayout.LayoutParams(-1,dp(if(rings)72 else if(expanded)64 else 40)))
+        if(vertical) {
+            val body=LinearLayout(context).apply{orientation=LinearLayout.HORIZONTAL}
+            body.addView(graph,LinearLayout.LayoutParams(dp(if(expanded)64 else 76),-1))
+            if(expanded){
+                detail=label(10.5f).apply{setPadding(dp(6),dp(3),dp(6),dp(3));setLineSpacing(dp(1).toFloat(),1f)}
+                body.addView(ScrollView(context).apply{isVerticalScrollBarEnabled=false;addView(detail)},LinearLayout.LayoutParams(0,-1,1f))
+            } else detail=null
+            box.addView(body,LinearLayout.LayoutParams(-1,0,1f))
+        } else {
+            box.addView(graph,LinearLayout.LayoutParams(-1,dp(if(rings)72 else if(expanded)64 else 40)))
+            if(expanded){
+                detail=label(12f)
+                box.addView(ScrollView(context).apply{addView(detail)},LinearLayout.LayoutParams(-1,0,1f))
+            }else detail=null
+        }
         if(expanded){
-            detail=label(12f)
-            box.addView(ScrollView(context).apply{addView(detail)},LinearLayout.LayoutParams(-1,0,1f))
-            box.addView(label(13f).apply{text="打开完整监控 ›";gravity=Gravity.CENTER;contentDescription="打开完整电脑性能页面";setOnClickListener{
+            box.addView(label(if(vertical)11f else 13f).apply{text="打开完整监控 ›";gravity=Gravity.CENTER;contentDescription="打开完整电脑性能页面";setOnClickListener{
                 ComputerMonitorNavigation.open()
                 context.startActivity(Intent(context,com.dsh.mobile.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-            }},LinearLayout.LayoutParams(-1,dp(44)))
-        }else detail=null
+            }},LinearLayout.LayoutParams(-1,dp(if(vertical)36 else 44)))
+        }
         box.visibility=if(ComputerPerformance.pageVisible.value)View.GONE else View.VISIBLE
         root=box
         runCatching{wm.addView(box,p)}.onFailure{root=null;settings.computerMonitorOverlay=false}
@@ -111,8 +132,11 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         val gpu=computerGpu(sample,selectedGpuId)
         fun percent(v:Double?)=v?.let{"${it.roundToInt()}%"}?:"—"
         fun bytes(v:Double?)=v?.let{if(it>=1073741824.0)String.format(java.util.Locale.getDefault(),"%.2f GB",it/1073741824.0) else ResourceLoad.size(it.toLong())}?:"未提供"
-        heading?.text=if(state.message.isNotBlank())"电脑性能 · 暂不可用" else "CPU ${percent(sample?.cpu)}  GPU${sample?.gpus?.indexOfFirst{it.id==gpu?.id}?.takeIf{it>=0}?:""} ${percent(gpu?.load)}"
-        val list=sample?.processes.orEmpty().sortedByDescending{it.cpu?:-1.0}.take(5)
+        val gpuNumber=sample?.gpus?.indexOfFirst{it.id==gpu?.id}?.takeIf{it>=0}
+        heading?.text=if(settings.computerMonitorStyle=="rings") {
+            if(settings.computerMonitorRingVertical&&!expanded)"性能" else if(state.message.isNotBlank())"电脑性能 · 暂不可用" else "电脑性能 · GPU${gpuNumber?:"—"}"
+        } else if(state.message.isNotBlank())"电脑性能 · 暂不可用" else "CPU ${percent(sample?.cpu)}  GPU${sample?.gpus?.indexOfFirst{it.id==gpu?.id}?.takeIf{it>=0}?:""} ${percent(gpu?.load)}"
+        val list=sample?.processes.orEmpty().sortedByDescending{it.cpu?:-1.0}.take(if(settings.computerMonitorRingVertical&&settings.computerMonitorStyle=="rings")3 else 5)
         detail?.text=android.text.SpannableStringBuilder().apply {
             fun note(text:String){
                 val start=length;append(text).append("\n")
@@ -131,6 +155,9 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         }
         graph?.state=state
         graph?.invalidate()
+    }
+    private fun toggleExpanded(){
+        expanded=!expanded;root?.let{runCatching{wm.removeView(it)}};root=null;build();render(ComputerPerformance.state.value)
     }
     private fun remove() {updates?.cancel();updates=null;token?.let(ComputerPerformance::release);token=null;root?.let{runCatching{wm.removeView(it)}};root=null;params=null}
     fun configurationChanged(){if(root!=null){root?.let{runCatching{wm.removeView(it)}};root=null;build();render(ComputerPerformance.state.value)}}
@@ -158,6 +185,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
             }
         override fun onDetachedFromWindow(){animator?.cancel();animator=null;super.onDetachedFromWindow()}
         var rings=false
+        var vertical=false
         private var prior:ComputerSample?=null
         var gpuId:String?=null
         var metric=ComputerMetric.VRAM
@@ -206,28 +234,32 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
             val memoryMetric=if(gpu?.total==0.0)ComputerMetric.SHARED else ComputerMetric.VRAM
             val metrics=listOf(ComputerMetric.CPU,ComputerMetric.GPU,ComputerMetric.RAM,memoryMetric)
             val colors=listOf(Color.rgb(107,210,176),Color.rgb(133,181,255),Color.rgb(193,166,255),Color.rgb(238,192,112))
-            val column=width/4f;val radius=minOf(dp(22),column*.35f);val cy=dp(27)
+            val column=if(vertical)width.toFloat() else width/4f
+            val row=if(vertical)height/4f else height.toFloat()
+            val scale=minOf(1f,row/dp(72))
+            val radius=minOf(dp(22)*scale,column*.35f)
             metrics.forEachIndexed {index,kind->
+                val cy=(if(vertical)row*index else 0f)+dp(27)*scale
                 val value=sample?.let{computerValue(it,kind,gpuId?:gpu?.id)}
                 val old=prior?.takeIf{it.instance==sample?.instance}?.let{computerValue(it,kind,gpuId?:gpu?.id)}
                 val shown=if(value!=null&&old!=null)old+(value-old)*reveal else value
                 val capacity=when(kind){ComputerMetric.CPU,ComputerMetric.GPU->100.0;ComputerMetric.RAM->sample?.memoryTotal;ComputerMetric.VRAM->gpu?.total;ComputerMetric.SHARED->gpu?.sharedTotal}
                 val ratio=if(shown!=null&&capacity!=null&&capacity>0)(shown/capacity).coerceIn(0.0,1.0) else null
-                val cx=column*(index+.5f)
+                val cx=if(vertical)column*.5f else column*(index+.5f)
                 val rect=android.graphics.RectF(cx-radius,cy-radius,cx+radius,cy+radius)
-                paint.style=Paint.Style.STROKE;paint.strokeWidth=dp(4);paint.strokeCap=Paint.Cap.ROUND
+                paint.style=Paint.Style.STROKE;paint.strokeWidth=dp(4)*scale;paint.strokeCap=Paint.Cap.ROUND
                 paint.color=Color.argb(40,255,255,255);canvas.drawArc(rect,-90f,360f,false,paint)
                 if(ratio!=null){paint.color=colors[index];canvas.drawArc(rect,-90f,(ratio*360).toFloat(),false,paint)}
                 paint.style=Paint.Style.FILL;paint.textAlign=Paint.Align.CENTER;paint.color=Color.WHITE
-                paint.textSize=resources.displayMetrics.scaledDensity*10
+                paint.textSize=resources.displayMetrics.scaledDensity*10*scale
                 val title=when(kind){ComputerMetric.RAM->"内存";ComputerMetric.VRAM->"显存";ComputerMetric.SHARED->"共享";else->kind.title}
-                canvas.drawText(title,cx,cy-dp(2),paint)
-                paint.textSize=resources.displayMetrics.scaledDensity*9;paint.color=colors[index]
-                canvas.drawText(ratio?.let{"${(it*100).roundToInt()}%"}?:"—",cx,cy+dp(11),paint)
-                paint.color=Color.rgb(169,179,195);paint.textSize=resources.displayMetrics.scaledDensity*9
+                canvas.drawText(title,cx,cy-dp(2)*scale,paint)
+                paint.textSize=resources.displayMetrics.scaledDensity*9*scale;paint.color=colors[index]
+                canvas.drawText(ratio?.let{"${(it*100).roundToInt()}%"}?:"—",cx,cy+dp(11)*scale,paint)
+                paint.color=Color.rgb(169,179,195);paint.textSize=resources.displayMetrics.scaledDensity*9*scale
                 val caption=if(kind in listOf(ComputerMetric.CPU,ComputerMetric.GPU)) {if(value==null)"未提供" else "占用率"}
                     else value?.let{if(it>=1073741824.0)String.format(java.util.Locale.getDefault(),"%.2f GB",it/1073741824.0) else ResourceLoad.size(it.toLong())}?:"未提供"
-                canvas.drawText(caption,cx,dp(64),paint)
+                canvas.drawText(caption,cx,(if(vertical)row*index else 0f)+dp(64)*scale,paint)
             }
             paint.textAlign=Paint.Align.LEFT;paint.strokeCap=Paint.Cap.BUTT
         }

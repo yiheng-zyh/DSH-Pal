@@ -57,6 +57,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
     val current=state.current;val gpu=computerGpu(current,gpuId)
     LaunchedEffect(current?.instance) {gpuId=current?.gpus?.firstOrNull{it.load!=null||it.used!=null||it.shared!=null}?.id ?: current?.gpus?.firstOrNull()?.id}
     val processes=remember(current?.processes,query,sort){current?.processes.orEmpty().filter {it.name.contains(query,true)||it.pid.toString()==query}.sortedByDescending {p->when(sort){ComputerMetric.CPU->p.cpu;ComputerMetric.GPU->p.gpu;ComputerMetric.RAM->p.memory;ComputerMetric.VRAM->p.dedicated;ComputerMetric.SHARED->p.shared} ?: -1.0}}
+    var ringVertical by remember {mutableStateOf(settings.computerMonitorRingVertical)}
     var overlayStyle by remember {mutableStateOf(settings.computerMonitorStyle)}
     var overlay by remember(revision) {mutableStateOf(settings.computerMonitorOverlay)}
     var hint by remember {mutableStateOf<String?>(null)}
@@ -128,7 +129,16 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                     Button(onClick={overlayStyle=style;settings.computerMonitorStyle=style;DshLiveService.current()?.refreshMonitor()},modifier=Modifier.weight(1f)) {Text((if(overlayStyle==style)"● " else "")+title,fontSize=12.sp)}
                                 }
                             }
-                            SettingsHint("圆环展示 CPU、GPU、内存及显存；长按图表切换显卡。")
+                            if(overlayStyle=="rings") {
+                                Text("圆环排布",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
+                                Spacer(Modifier.height(8.dp))
+                                Row(Modifier.fillMaxWidth().padding(bottom=12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    listOf(false to "横向排列",true to "纵向排列").forEach {(vertical,title)->
+                                        Button(onClick={ringVertical=vertical;settings.computerMonitorRingVertical=vertical;DshLiveService.current()?.refreshMonitor()},modifier=Modifier.weight(1f)) {Text((if(ringVertical==vertical)"● " else "")+title,fontSize=12.sp)}
+                                    }
+                                }
+                            }
+                            SettingsHint("圆环可横排或竖排，点圆环展开详情；长按图表切换显卡。")
                             Spacer(Modifier.height(12.dp))
                         }
                     }
