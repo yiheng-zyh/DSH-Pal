@@ -47,7 +47,13 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     }
     fun reconcile() {
         if(!settings.computerMonitorOverlay||!Settings.canDrawOverlays(context)||!context.getSystemService(android.os.PowerManager::class.java).isInteractive||context.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked){remove();return}
-        if(root!=null && (renderedStyle!=settings.computerMonitorStyle || renderedVertical!=settings.computerMonitorRingVertical)){expanded=false;remove()}
+        if(root!=null && (renderedStyle!=settings.computerMonitorStyle || renderedVertical!=settings.computerMonitorRingVertical)) {
+            if(renderedStyle!=settings.computerMonitorStyle)expanded=false
+            root?.let{runCatching{wm.removeView(it)}};root=null
+            build();render(ComputerPerformance.state.value)
+            if(root==null)remove()
+            return
+        }
         if(root!=null)return
         build()
         if(root==null)return
@@ -61,11 +67,11 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     private fun build() {
         val b=bounds();val rings=settings.computerMonitorStyle=="rings";renderedStyle=settings.computerMonitorStyle
         val vertical=rings&&settings.computerMonitorRingVertical;renderedVertical=settings.computerMonitorRingVertical
-        val compactWidth=if(vertical)84 else if(rings)300 else 206
-        val compactHeight=if(vertical)268 else if(rings)124 else 92
-        val windowHeight=minOf(dp(if(expanded){if(vertical)288 else 360}else compactHeight),maxOf(dp(120),b.height()-dp(48)))
-        val expandedWidth=if(vertical)256 else 330
-        val headerHeight=if(vertical)32 else 40
+        val compactWidth=if(vertical)84 else if(rings)252 else 206
+        val compactHeight=if(vertical)268 else if(rings)108 else 92
+        val windowHeight=minOf(dp(if(expanded){if(vertical)252 else if(rings)236 else 316}else compactHeight),maxOf(dp(120),b.height()-dp(48)))
+        val expandedWidth=if(vertical)256 else if(rings)280 else 330
+        val headerHeight=if(rings)32 else 40
         val p=params?:WindowManager.LayoutParams(dp(if(expanded)expandedWidth else compactWidth),windowHeight,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,android.graphics.PixelFormat.TRANSLUCENT).apply {
             gravity=Gravity.TOP or Gravity.LEFT
@@ -75,8 +81,10 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         p.x=p.x.coerceIn(0,maxOf(0,b.width()-p.width));p.y=p.y.coerceIn(dp(24),maxOf(dp(24),b.height()-p.height-dp(24)))
         val box=LinearLayout(context).apply {orientation=LinearLayout.VERTICAL;background=GradientDrawable().apply{setColor(Color.rgb(30,34,43));cornerRadius=dp(20).toFloat();setStroke(dp(1),Color.rgb(74,82,96))};elevation=dp(8).toFloat();setPadding(dp(4),dp(4),dp(4),dp(4))}
         val header=LinearLayout(context)
-        heading=label(if(vertical&&!expanded)11f else 12f).apply {isSingleLine=true;ellipsize=android.text.TextUtils.TruncateAt.END;contentDescription="拖动性能悬浮窗，点按展开或收起"}
+        heading=label(if(vertical&&!expanded)14f else 12f).apply {if(vertical&&!expanded){setPadding(0,0,0,0);gravity=Gravity.CENTER};isSingleLine=true;ellipsize=android.text.TextUtils.TruncateAt.END;contentDescription=if(rings)"拖动性能悬浮窗，点按切换横竖排列" else "拖动性能悬浮窗，点按展开或收起"}
         header.addView(heading,LinearLayout.LayoutParams(0,dp(headerHeight),1f))
+        if(rings)header.addView(label(16f).apply {text=if(expanded)"−" else "+";setPadding(0,0,0,0);gravity=Gravity.CENTER;contentDescription=if(expanded)"收起性能详情" else "展开性能详情";setOnClickListener{toggleExpanded()}},LinearLayout.LayoutParams(dp(24),dp(headerHeight)))
+        if(expanded)header.addView(label(14f).apply {text="↗";setPadding(0,0,0,0);gravity=Gravity.CENTER;contentDescription="打开完整电脑性能页面";setOnClickListener{openFullMonitor()}},LinearLayout.LayoutParams(dp(28),dp(headerHeight)))
         header.addView(label(18f).apply {text="×";gravity=Gravity.CENTER;contentDescription="关闭性能悬浮窗";setOnClickListener{settings.computerMonitorOverlay=false;reconcile()}},LinearLayout.LayoutParams(dp(if(vertical)32 else 40),dp(headerHeight)))
         var downX=0f;var downY=0f;var oldX=0;var oldY=0;var moved=false
         heading!!.setOnTouchListener {_,e->
@@ -85,7 +93,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
                 MotionEvent.ACTION_MOVE->{val dx=e.rawX-downX;val dy=e.rawY-downY;if(kotlin.math.abs(dx)+kotlin.math.abs(dy)>dp(8))moved=true
                     if(moved){p.x=(oldX+dx).roundToInt().coerceIn(0,maxOf(0,b.width()-p.width));p.y=(oldY+dy).roundToInt().coerceIn(dp(24),maxOf(dp(24),b.height()-p.height-dp(24)));runCatching{wm.updateViewLayout(box,p)}}}
                 MotionEvent.ACTION_UP->{if(moved){settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()}
-                    else toggleExpanded()}
+                    else if(rings)toggleRingOrientation() else toggleExpanded()}
             };true
         }
         box.addView(header)
@@ -97,7 +105,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
                 true
             }
             setOnClickListener {
-                if(rings)toggleExpanded()
+                if(rings)toggleRingOrientation()
                 else {curveMetric=ComputerMetric.entries[(curveMetric.ordinal+1)%ComputerMetric.entries.size];metric=curveMetric;gpuId=selectedGpuId;contentDescription="${metric.title}曲线，点按切换";invalidate()}
             }
         }
@@ -110,18 +118,13 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
             } else detail=null
             box.addView(body,LinearLayout.LayoutParams(-1,0,1f))
         } else {
-            box.addView(graph,LinearLayout.LayoutParams(-1,dp(if(rings)72 else if(expanded)64 else 40)))
+            box.addView(graph,LinearLayout.LayoutParams(-1,dp(if(rings)64 else if(expanded)64 else 40)))
             if(expanded){
-                detail=label(12f)
+                detail=label(if(rings)11f else 12f)
                 box.addView(ScrollView(context).apply{addView(detail)},LinearLayout.LayoutParams(-1,0,1f))
             }else detail=null
         }
-        if(expanded){
-            box.addView(label(if(vertical)11f else 13f).apply{text="打开完整监控 ›";gravity=Gravity.CENTER;contentDescription="打开完整电脑性能页面";setOnClickListener{
-                ComputerMonitorNavigation.open()
-                context.startActivity(Intent(context,com.dsh.mobile.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-            }},LinearLayout.LayoutParams(-1,dp(if(vertical)36 else 44)))
-        }
+        if(rings){box.setOnClickListener{toggleRingOrientation()};detail?.setOnClickListener{toggleRingOrientation()}}
         box.visibility=if(ComputerPerformance.pageVisible.value)View.GONE else View.VISIBLE
         root=box
         runCatching{wm.addView(box,p)}.onFailure{root=null;settings.computerMonitorOverlay=false}
@@ -134,28 +137,44 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         fun bytes(v:Double?)=v?.let{if(it>=1073741824.0)String.format(java.util.Locale.getDefault(),"%.2f GB",it/1073741824.0) else ResourceLoad.size(it.toLong())}?:"未提供"
         val gpuNumber=sample?.gpus?.indexOfFirst{it.id==gpu?.id}?.takeIf{it>=0}
         heading?.text=if(settings.computerMonitorStyle=="rings") {
-            if(settings.computerMonitorRingVertical&&!expanded)"性能" else if(state.message.isNotBlank())"电脑性能 · 暂不可用" else "电脑性能 · GPU${gpuNumber?:"—"}"
+            if(settings.computerMonitorRingVertical&&!expanded)"⋮" else if(state.message.isNotBlank())"电脑性能 · 暂不可用" else "电脑性能 · GPU${gpuNumber?:"—"}"
         } else if(state.message.isNotBlank())"电脑性能 · 暂不可用" else "CPU ${percent(sample?.cpu)}  GPU${sample?.gpus?.indexOfFirst{it.id==gpu?.id}?.takeIf{it>=0}?:""} ${percent(gpu?.load)}"
-        val list=sample?.processes.orEmpty().sortedByDescending{it.cpu?:-1.0}.take(if(settings.computerMonitorRingVertical&&settings.computerMonitorStyle=="rings")3 else 5)
+        val list=sample?.processes.orEmpty().sortedByDescending{it.cpu?:-1.0}.take(if(settings.computerMonitorStyle=="rings")3 else 5)
         detail?.text=android.text.SpannableStringBuilder().apply {
-            fun note(text:String){
-                val start=length;append(text).append("\n")
-                setSpan(android.text.style.ForegroundColorSpan(Color.rgb(169,179,195)),start,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                setSpan(android.text.style.RelativeSizeSpan(.85f),start,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val muted=Color.rgb(158,169,186)
+            val cpuColor=Color.rgb(107,210,176);val gpuColor=Color.rgb(133,181,255)
+            val ramColor=Color.rgb(193,166,255);val vramColor=Color.rgb(238,192,112)
+            fun segment(text:String,color:Int,size:Float=1f,bold:Boolean=false){
+                val start=length;append(text)
+                setSpan(android.text.style.ForegroundColorSpan(color),start,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                if(size!=1f)setSpan(android.text.style.RelativeSizeSpan(size),start,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                if(bold)setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD),start,length,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-            if(state.message.isNotBlank())note(state.message+" · 上次数据")
-            append("内存 ${bytes(sample?.memory)} / ${bytes(sample?.memoryTotal)}\n")
-            append("专用显存 ${bytes(gpu?.used)} / ${bytes(gpu?.total)}\n")
-            note("共享 GPU 内存 ${bytes(gpu?.shared)}")
-            note(gpu?.name?:"所选 GPU 未提供")
-            if(gpu!=null && gpu.load==null && gpu.used==null && gpu.shared==null)note("此GPU暂无计数器数据，长按图表可切换")
-            if((sample?.gpus?.size?:0)>1)note("长按图表切换显卡 · 进程为跨显卡统计")
-            append("\n");note("CPU 占用较高的进程")
-            append(list.joinToString("\n"){"${it.name.take(22)}  ${percent(it.cpu)}"})
+            fun resource(title:String,value:Double?,capacity:Double?,color:Int){
+                segment("$title  ",muted,.9f);segment(bytes(value),color,bold=true)
+                if(capacity!=null)segment(" / ${bytes(capacity)}",muted,.85f)
+                append("\n")
+            }
+            if(state.message.isNotBlank()){segment("数据未更新\n",vramColor,.85f)}
+            resource("内存",sample?.memory,sample?.memoryTotal,ramColor)
+            resource("专用显存",gpu?.used,gpu?.total,vramColor)
+            resource("共享内存",gpu?.shared,null,gpuColor)
+            segment(gpu?.name?:"GPU 未提供",muted,.8f)
+            append("\n\n");segment("CPU · TOP ${list.size}\n",cpuColor,.85f,bold=true)
+            list.forEachIndexed {index,process->
+                segment(process.name.take(22),Color.rgb(226,232,241),.95f)
+                segment("  ${percent(process.cpu)}",cpuColor,bold=true)
+                if(index<list.lastIndex)append("\n")
+            }
         }
         graph?.state=state
         graph?.invalidate()
     }
+    private fun openFullMonitor(){
+        ComputerMonitorNavigation.open()
+        context.startActivity(Intent(context,com.dsh.mobile.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+    }
+    private fun toggleRingOrientation(){settings.computerMonitorRingVertical=!settings.computerMonitorRingVertical;reconcile()}
     private fun toggleExpanded(){
         expanded=!expanded;root?.let{runCatching{wm.removeView(it)}};root=null;build();render(ComputerPerformance.state.value)
     }
