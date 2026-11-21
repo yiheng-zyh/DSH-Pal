@@ -59,6 +59,7 @@ class DshLiveService : Service() {
 
     /** Lazily created; owns the MediaSession that backs the media-island channel. */
     private var media: MediaIsland? = null
+    private var monitor: com.dsh.mobile.overlay.ComputerMonitorOverlay? = null
     private var companion: com.dsh.mobile.overlay.FloatingCompanion? = null
     var companionBridge: com.dsh.mobile.bridge.DshBridge? = null
     var pendingOverlayDraft: String? = null
@@ -105,6 +106,8 @@ class DshLiveService : Service() {
         scope.launch { state.collectLatest { companion?.submit(it) } }
         scope.launch { com.dsh.mobile.core.NetworkConnectivity.visible.collectLatest { companion?.reconcile() } }
         companion?.reconcile()
+        monitor=com.dsh.mobile.overlay.ComputerMonitorOverlay(this,settings)
+        monitor?.reconcile()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -135,6 +138,7 @@ class DshLiveService : Service() {
     }
 
     override fun onDestroy() {
+        monitor?.dispose();monitor=null
         companion?.dispose(); companion = null
         unsubscribePreferences?.invoke(); unsubscribePreferences = null
         instances.value = null
@@ -152,10 +156,12 @@ class DshLiveService : Service() {
         super.onDestroy()
     }
 
+    fun refreshMonitor() {scope.launch {monitor?.reconcile()}}
     fun refreshCompanion() { scope.launch { companion?.reconcile() } }
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         companion?.configurationChanged()
+        monitor?.configurationChanged()
     }
 
     // ---- public surface ------------------------------------------------------
@@ -327,6 +333,7 @@ class DshLiveService : Service() {
     }
 
     private suspend fun reconcilePreferences() {
+        monitor?.reconcile()
         companion?.reconcile()
         RunLog.info("Notification", "preferences applied island=${settings.islandEnabled} progress=${settings.notificationEnabled} background=${settings.backgroundLive}")
         updateNotification(_state.value)

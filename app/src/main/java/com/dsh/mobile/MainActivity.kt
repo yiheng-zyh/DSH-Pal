@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         DshLiveService.current()?.refreshCompanion()
+        DshLiveService.current()?.refreshMonitor()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

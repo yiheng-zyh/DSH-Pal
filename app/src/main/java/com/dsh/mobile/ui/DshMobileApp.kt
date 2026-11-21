@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.displayCutout
 
+import androidx.compose.runtime.collectAsState
 import android.webkit.WebView
 import com.dsh.mobile.ui.AppBackHandler as BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -92,6 +93,10 @@ fun DshMobileApp(
     // 「设备与连接」才是「选择连接途径」的页面：当前连接、每一种已保存方式、
     // 局域网自动发现、以及通往内置通道和重新扫码的入口都在那里。
     var openConnectionList by remember { mutableStateOf(false) }
+    var monitorStart by remember {mutableStateOf(0)}
+    val monitorRequested by com.dsh.mobile.core.ComputerMonitorNavigation.requested.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(monitorRequested) {if(monitorRequested){com.dsh.mobile.core.ComputerMonitorNavigation.consume();monitorStart++;showDiagnostics=true}}
+
     var appearance by remember { mutableStateOf(settings.localAppearance.id) }
     var pendingNavigation by remember { mutableStateOf<(() -> Unit)?>(null) }
     var predictiveBack by remember {mutableStateOf(settings.predictiveBackEnabled)}
@@ -469,7 +474,7 @@ fun DshMobileApp(
             exit = fadeOut(Motion.exit()),
         ) {
             BackGestureSurface {
-            SettingsScreen(settings = settings, webView = activeWebView, startAtConnection = openConnectionList,
+            SettingsScreen(settings = settings, webView = activeWebView, startAtConnection = openConnectionList, monitorRequest=monitorStart,
                 // 启动探测发现「上次那条连不上」时，把结论交给设置页顶部渲染。
                 // 只传数据、不在 DshMobileApp 里另开浮层：用户在「设备与连接」页上
                 // 既要看提示，也要立刻能换一条，两件事必须在同一屏。
@@ -516,6 +521,7 @@ fun DshMobileApp(
                     if (settings.baseUrl.isNotBlank()) applyConnection(settings.baseUrl) else reloadPage()
                 }
             }, onBack = {
+                monitorStart=0
                 showDiagnostics = false
                 openConnectionList = false
                 configuredOrigin = settings.baseUrl

@@ -1,4 +1,6 @@
 import http from 'node:http';
+import {gzipSync} from 'node:zlib';
+import {createPerformanceMonitor} from './performance.mjs';
 import net from 'node:net';
 import os from 'node:os';
 import {pipeline} from 'node:stream';
@@ -78,7 +80,7 @@ function pathname(value){
   }catch{return null;}
 }
 /** A streaming boundary for an authenticated DSH remote plugin, never a general local proxy. */
-export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTunnelState}){
+export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTunnelState,performanceMonitor}){
   const allowedOrigin=origin(publicOrigin),publicUrl=new URL(allowedOrigin);
   /**
    * 当前有效的直连 authority（`host[:port]`，IPv6 带方括号）→ 它自己的 scheme。
@@ -96,6 +98,7 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
     }
     return null;
   }
+  const monitor=performanceMonitor??createPerformanceMonitor();
   const agent=new http.Agent({keepAlive:true,maxSockets:24,maxFreeSockets:6});
   const liveSockets=new Set();
   // Fixed categories only: never retain user paths, resource tokens or queries.
@@ -202,7 +205,7 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
     // 第二字节被换掉），App 的隧道状态因此恒为 UNKNOWN，每 10 秒记一条 warn。
     // 这里让上游对这一个端点回明文，注入逻辑就工作在真正的 JSON 上；
     // 其余请求的压缩照旧透传，一行不改。
-    if(!upgrade&&(pathname(req.url)==='/api/pair/status'||/^\/(?:remote\/)?api\/workspaceFiles\/stat$/.test(pathname(req.url)||'')&&new URL(req.url,allowedOrigin).searchParams.get('pal_file_metadata')==='1'||/^\/(?:remote\/)?api\/session\/page$/.test(pathname(req.url)||'')&&new URL(req.url,allowedOrigin).searchParams.get('pal_file_events')==='1')){
+    if(!upgrade&&(pathname(req.url)==='/api/pair/status'||/^\/remote\/api\/session\/list$/.test(pathname(req.url)||'')&&new URL(req.url,allowedOrigin).searchParams.get('pal_performance')==='1'||/^\/(?:remote\/)?api\/workspaceFiles\/stat$/.test(pathname(req.url)||'')&&new URL(req.url,allowedOrigin).searchParams.get('pal_file_metadata')==='1'||/^\/(?:remote\/)?api\/session\/page$/.test(pathname(req.url)||'')&&new URL(req.url,allowedOrigin).searchParams.get('pal_file_events')==='1')){
       headers['accept-encoding']='identity';
       delete headers['content-encoding'];
     }
@@ -241,6 +244,10 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
       let cancelled=false;
       const started=Date.now();
       const parsed=new URL(req.url,allowedOrigin);
+      const performance=req.method==='POST'&&parsed.pathname==='/remote/api/session/list'&&parsed.searchParams.get('pal_performance')==='1';
+      const performanceInterval=Number(parsed.searchParams.get('pal_interval'));
+      const processMode=parsed.searchParams.get('pal_processes');
+      if(performance)for(const key of ['pal_performance','pal_interval','pal_processes'])parsed.searchParams.delete(key);
       const eventBudget=/^\/(?:remote\/)?api\/ego\/stream$/.test(parsed.pathname)&&parsed.searchParams.get('dsh_events_only')==='1';
       if(eventBudget)parsed.searchParams.delete('dsh_events_only');
       const fileMetadata=req.method==='POST'&&/^\/(?:remote\/)?api\/workspaceFiles\/stat$/.test(parsed.pathname)&&parsed.searchParams.get('pal_file_metadata')==='1';
@@ -253,9 +260,28 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
       // 而不是只看得到「已收到业务响应」却不知道外部通道其实没工作。
       // 只改写这一个 JSON 响应，其余请求照旧透传，不影响 DSH 自身协议。
       const injectDiagnostics=parsed.pathname==='/api/pair/status'&&req.method!=='HEAD';
-      const upstream=http.request({host:'127.0.0.1',port:localPort,path:eventBudget||fileMetadata||fileEvents?parsed.pathname+parsed.search:req.url,method:req.method,headers:upstreamHeaders(req),agent},reply=>{
+      const upstream=http.request({host:'127.0.0.1',port:localPort,path:performance||eventBudget||fileMetadata||fileEvents?parsed.pathname+parsed.search:req.url,method:req.method,headers:upstreamHeaders(req),agent},reply=>{
         if(pathname(req.url)?.startsWith('/remote/')){
           statistics.remoteResponses++;if(reply.statusCode>=400)statistics.remoteErrors++;
+        }
+        if(performance&&reply.statusCode===200&&!reply.headers['content-encoding']&&String(reply.headers['content-type']).includes('application/json')) {
+          const chunks=[];let bytes=0;
+          reply.on('data',chunk=>{bytes+=chunk.length;if(bytes>2097152){upstream.destroy();res.destroy();}else chunks.push(chunk);});
+          reply.on('end',()=>{
+            if(res.destroyed)return;
+            let body=Buffer.concat(chunks);
+            try {
+              const envelope=JSON.parse(body.toString('utf8'));
+              if(envelope?.result?.ok===true){envelope.result.value=monitor.snapshot({includeHistory:false,intervalMs:performanceInterval,includeProcesses:processMode==='0'?false:processMode==='top'?'top':true});body=Buffer.from(JSON.stringify(envelope));}
+            } catch {}
+            const headers=stripHop(reply.headers);delete headers.etag;delete headers['content-length'];
+            if(body.length>2048 && /(?:^|,)\s*gzip(?:\s*;\s*q=(?!0(?:\.0*)?\s*(?:,|$))[0-9.]+)?\s*(?:,|$)/i.test(String(req.headers['accept-encoding']||''))) {
+              body=gzipSync(body,{level:1});headers['content-encoding']='gzip';headers.vary='Accept-Encoding';
+            }
+            statistics.responseBytes+=body.length;meter.responseBytes+=body.length;
+            res.writeHead(200,{...headers,'cache-control':'no-store','content-length':body.length});res.end(body);
+          });
+          reply.on('error',()=>res.destroy());return;
         }
         if(injectDiagnostics&&reply.statusCode===200){
           const chunks=[];
@@ -456,6 +482,7 @@ export function createGateway({publicOrigin,getTargetPort,getDirectEntries,getTu
       server.listen(listenPort,'127.0.0.1',()=>{server.removeListener('error',reject);resolve(server.address());});
     }),
     close:()=>new Promise(resolve=>{
+      monitor.close();
       for(const socket of liveSockets)socket.destroy();
       const pending=[...directListeners.values()].map(listener=>new Promise(done=>{
         for(const socket of listener.sockets)socket.destroy();

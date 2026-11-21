@@ -70,13 +70,14 @@ import androidx.compose.animation.core.tween
 
 private enum class SettingsPage(val title: String) {
     Compatibility("网页兼容与排查"),
-    Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Channel("通道自动选路"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Downloads("已下载文件"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), Updates("更新与公告"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
+    Monitor("电脑性能"), Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Channel("通道自动选路"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Downloads("已下载文件"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), Updates("更新与公告"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
 }
 
 private data class SettingsDestination(val page: SettingsPage?, val title: String, val detail: String, val keywords: String = "")
 
 private val settingsDestinations = listOf(
     "连接" to listOf(
+        SettingsDestination(SettingsPage.Monitor,"电脑性能","CPU、GPU、内存、显存与进程曲线","任务管理器 模型 监控 性能 悬浮窗"),
         SettingsDestination(SettingsPage.Connection, "设备与连接", "管理已配对设备与连接通道", "配对 公网 局域网 VPN USB Tailscale WireGuard"),
         SettingsDestination(null, "连接帮助", "查看电脑与手机的配置步骤", "教程 安装 Cloudflare Relay"),
     ),
@@ -126,6 +127,7 @@ fun SettingsScreen(
     // 外面无法指定，所以给出这个入口参数；默认仍然是「设置」首页，
     // 从别处打开设置的行为一字未变。
     startAtConnection: Boolean = false,
+    monitorRequest: Int = 0,
     // 启动探测的结论（「上次的连接现在连不上：<地址>。<原因>」）。
     //
     // 为什么由外部传进来、而不是设置页自己探：探测发生在 App 启动那一刻，
@@ -139,6 +141,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var page by remember { mutableStateOf(if (startAtConnection) SettingsPage.Connection else SettingsPage.Home) }
+    androidx.compose.runtime.LaunchedEffect(monitorRequest) {if(monitorRequest>0)page=SettingsPage.Monitor}
     var confirmUnpair by remember { mutableStateOf(false) }
     var showConnectionHelp by remember { mutableStateOf(false) }
     var showVpn by remember { mutableStateOf(false) }
@@ -187,6 +190,7 @@ fun SettingsScreen(
         ) { section ->
         pageStates.SaveableStateProvider(section.name) {
         if(section==SettingsPage.Cache) com.dsh.mobile.ui.BackGestureSurface {CacheManagementScreen(settings,webView,{page=SettingsPage.Home},onReloadPage)}
+        else if(section==SettingsPage.Monitor) com.dsh.mobile.ui.BackGestureSurface {ComputerMonitorScreen(settings){page=SettingsPage.Home}}
         else if(section==SettingsPage.Downloads) com.dsh.mobile.ui.BackGestureSurface {DownloadsScreen(){page=SettingsPage.Home}}
         else if(section==SettingsPage.Logs) com.dsh.mobile.ui.BackGestureSurface {LogSettingsScreen{page=SettingsPage.Diagnostics}}
         else if(section==SettingsPage.About) com.dsh.mobile.ui.BackGestureSurface {AboutScreen{page=SettingsPage.Home}}

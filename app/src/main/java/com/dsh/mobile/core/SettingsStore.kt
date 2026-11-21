@@ -36,6 +36,18 @@ class SettingsStore(context: Context) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         return {prefs.unregisterOnSharedPreferenceChangeListener(listener)}
     }
+    var computerMonitorIntervalMs: Int
+        get() = prefs.getInt("computer_monitor_interval_ms",1000).takeIf{it in listOf(500,1000,2000)} ?: 1000
+        set(value) {prefs.edit {putInt("computer_monitor_interval_ms",if(value in listOf(500,1000,2000))value else 1000)}}
+    var computerMonitorOverlay: Boolean
+        get() = prefs.getBoolean("computer_monitor_overlay",false)
+        set(value) {prefs.edit {putBoolean("computer_monitor_overlay",value)}}
+    var computerMonitorX: Float
+        get() = prefs.getFloat("computer_monitor_x",.05f).coerceIn(0f,1f)
+        set(value) {prefs.edit {putFloat("computer_monitor_x",value.coerceIn(0f,1f))}}
+    var computerMonitorY: Float
+        get() = prefs.getFloat("computer_monitor_y",.2f).coerceIn(0f,1f)
+        set(value) {prefs.edit {putFloat("computer_monitor_y",value.coerceIn(0f,1f))}}
     var downloadOpenAfter: Boolean
         get() = prefs.getBoolean("download_open_after", true)
         set(value) { prefs.edit { putBoolean("download_open_after", value) } }
@@ -377,7 +389,7 @@ class SettingsStore(context: Context) {
 
     /** Observe live controls across SettingsStore instances. Caller must unsubscribe. */
     fun observeRuntimePreferences(onChanged: () -> Unit): () -> Unit {
-        val watched = setOf(KEY_ISLAND, KEY_NOTIFICATION, KEY_BACKGROUND_LIVE, KEY_HAPTICS, KEY_RETRACT)
+        val watched = setOf(KEY_ISLAND, KEY_NOTIFICATION, KEY_BACKGROUND_LIVE, KEY_HAPTICS, KEY_RETRACT, "computer_monitor_overlay")
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> if (key in watched) onChanged() }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }

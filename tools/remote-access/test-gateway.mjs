@@ -33,13 +33,13 @@ test('file metadata opt-in preserves backend authentication and strips its priva
     assert.equal(allowed.headers['cache-control'], 'no-store');
   } finally { await f.close(); }
 });
-async function fixture(handler){
+async function fixture(handler,performanceMonitor){
   const sockets=new Set();
   const backend=http.createServer(handler);
   backend.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
   backend.listen(0,'127.0.0.1');await once(backend,'listening');
   let target=backend.address().port;
-  const gateway=createGateway({publicOrigin,getTargetPort:()=>target});
+  const gateway=createGateway({publicOrigin,getTargetPort:()=>target,performanceMonitor});
   await gateway.listen(0);
   return {gateway,backend,setTarget:value=>target=value,
     close:async()=>{await gateway.close();for(const socket of sockets)socket.destroy();await new Promise(resolve=>backend.close(resolve));}};
@@ -168,4 +168,40 @@ test('a missing local service stays a real failure and recovers when a verified 
     const actual=f.backend.address().port;f.setTarget(0);assert.equal((await request(f)).status,503);
     f.setTarget(actual);assert.equal((await request(f)).body.toString(),'healthy');
   }finally{await f.close();}
+});
+
+
+test('performance opt-in only samples after successful paired RPC authorization',async()=>{
+ let calls=0,seen;
+ const monitor={snapshot(){calls++;return {schema:1,status:'ok',cpu:12}},close(){}};
+ const f=await fixture((req,res)=>{
+  seen={url:req.url,encoding:req.headers['accept-encoding']};
+  const good=req.headers.cookie==='seat=fixture';
+  res.writeHead(good?200:403,{'content-type':'application/json'});
+  res.end(JSON.stringify(good?{result:{ok:true,value:{items:[]}}}:{result:{ok:false,error:{code:'unpaired'}}}));
+ },monitor);
+ try {
+  const route='/remote/api/session/list?pal_performance=1';
+  const denied=await request(f,route,{method:'POST'});assert.equal(denied.status,403);assert.equal(calls,0);
+  const ordinary=await request(f,'/remote/api/session/list',{method:'POST',headers:{cookie:'seat=fixture'}});
+  assert.deepEqual(JSON.parse(ordinary.body).result.value,{items:[]});assert.equal(calls,0);
+  const result=await request(f,route,{method:'POST',headers:{cookie:'seat=fixture'}});
+  assert.equal(calls,1);assert.equal(JSON.parse(result.body).result.value.cpu,12);
+  assert.equal(seen.url,'/remote/api/session/list');assert.equal(seen.encoding,'identity');assert.equal(result.headers['cache-control'],'no-store');
+ } finally {await f.close();}
+});
+
+
+test('high-rate performance strips polling options and compresses large process frames',async()=>{
+ let options;
+ const monitor={snapshot(value){options=value;return {schema:1,status:'ok',processes:Array.from({length:200},(_,pid)=>({pid,name:'fixture-process',memory:10000000}))}},close(){}};
+ let path;
+ const f=await fixture((req,res)=>{path=req.url;res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({result:{ok:true,value:{items:[]}}}));},monitor);
+ try {
+  const r=await request(f,'/remote/api/session/list?pal_performance=1&pal_interval=500&pal_processes=0',{method:'POST',headers:{'accept-encoding':'gzip'}});
+  assert.equal(path,'/remote/api/session/list');assert.equal(options.intervalMs,500);assert.equal(options.includeProcesses,false);
+  assert.equal(r.headers['content-encoding'],'gzip');assert.equal(zlib.gunzipSync(r.body).length>2048,true);
+  assert.equal(JSON.parse(zlib.gunzipSync(r.body)).result.value.schema,1);
+  assert.equal(Number(r.headers['content-length']),r.body.length);
+ } finally {await f.close();}
 });
