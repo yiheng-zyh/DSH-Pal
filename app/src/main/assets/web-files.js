@@ -2,10 +2,14 @@
   if (window.top !== window || window.__DSH_FILE_SEND__) return;
   var authority = '__DSH_FILE_AUTHORITY__';
   var exports = new Map();
+  window.__DSH_FILE_OPTIONS__ = {
+    getOpenAfter: function() { try { return DshFiles.downloadOpenAfter(); } catch (_) { return true; } },
+    setOpenAfter: function(value) { DshFiles.setDownloadOpenAfter(authority, !!value); }
+  };
   window.__DSH_OFFER_REMOTE_FILE__ = function(source, name) {
     var token = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2);
     exports.set(token, source);
-    if (!DshFiles.offerBlob(authority, token, name, 'application/octet-stream', source.size)) {
+    if (!(DshFiles.offerFile ? DshFiles.offerFile(authority, token, name, 'application/octet-stream', source.size, JSON.stringify(source.context || {})) : DshFiles.offerBlob(authority, token, name, 'application/octet-stream', source.size))) {
       exports.delete(token);
       throw Error('已有文件正在保存，或文件超过 512 MB');
     }

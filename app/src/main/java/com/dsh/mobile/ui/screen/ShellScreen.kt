@@ -845,6 +845,22 @@ private fun TaskStrip(
     val surface = LocalShellSurface.current
     val stripFill = if (unifiedBackground) surface.background else surface.raised
     val compact=androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp<480
+    val stripContext=androidx.compose.ui.platform.LocalContext.current
+    val stripSettings=remember(stripContext) {SettingsStore(stripContext)}
+    var collapsePortrait by remember {mutableStateOf(stripSettings.portraitCollapseConnectionBar)}
+    DisposableEffect(stripSettings) {val stop=stripSettings.observeDisplayChrome {collapsePortrait=stripSettings.portraitCollapseConnectionBar};onDispose {stop()}}
+    val landscape=androidx.compose.ui.platform.LocalConfiguration.current.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    var expanded by remember(landscape,collapsePortrait) {mutableStateOf(!(landscape || collapsePortrait))}
+    if(!expanded) {
+        Row(Modifier.fillMaxWidth().background(stripFill).clickable {expanded=true}.heightIn(min=28.dp).padding(horizontal=12.dp),verticalAlignment=Alignment.CenterVertically) {
+            Text("●",color=if(connected)surface.onBackground else accents.error,fontSize=10.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(connectionName,modifier=Modifier.weight(1f),fontSize=11.sp,color=surface.onBackground,maxLines=1,overflow=TextOverflow.Ellipsis)
+            Text("连接与工具 ⌄",fontSize=11.sp,color=surface.onBackgroundMuted)
+        }
+        return
+    }
+
 
     val accent by androidx.compose.animation.animateColorAsState(
         targetValue = if (!connected) accents.error else accents.forPhase(task.phase),
@@ -952,6 +968,8 @@ private fun TaskStrip(
                 com.dsh.mobile.ui.AppIconButton(com.dsh.mobile.ui.AppActionIcon.Settings,"设置",onOpenDiagnostics,tint=surface.onBackground)
             }
         }
+        if(landscape || collapsePortrait) Text("收起连接与工具 ⌃",fontSize=11.sp,color=surface.onBackgroundMuted,
+            modifier=Modifier.fillMaxWidth().clickable {expanded=false}.padding(horizontal=12.dp,vertical=6.dp))
         // 第二行：平时是 networkStatus；有通道建议时**原位替换**成建议内容。
         //
         // 为什么原位替换而不是新加一行：用户要求「整合到状态栏上面」「缩小界面」。

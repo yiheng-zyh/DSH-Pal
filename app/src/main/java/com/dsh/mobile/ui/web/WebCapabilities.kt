@@ -83,7 +83,14 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
     private val main = Handler(Looper.getMainLooper())
     private var upload: ValueCallback<Array<Uri>>? = null
     private var audio: PermissionRequest? = null
-    private data class Download(val token: String?, val url: String?, val name: String, val size: Long = 0)
+    private val downloads = com.dsh.mobile.core.DownloadStore.get(context)
+    @JavascriptInterface fun downloadOpenAfter(): Boolean = com.dsh.mobile.core.SettingsStore(context).downloadOpenAfter
+    @JavascriptInterface fun setDownloadOpenAfter(authority: String, enabled: Boolean) {
+        if(authority == exportAuthority) main.post { if(trusted()) com.dsh.mobile.core.SettingsStore(context).downloadOpenAfter=enabled }
+    }
+    private data class Download(val token: String?, val url: String?, val name: String, val size: Long = 0,
+        val session: String = "", val conversation: String = "", val openAfter: Boolean = true,
+        var mime: String = "application/octet-stream", var file: com.dsh.mobile.core.DownloadStore.File? = null)
     @Volatile private var download: Download? = null
     private var output: OutputStream? = null
     private var written = 0L
@@ -134,32 +141,57 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
     }
     fun downloadUrl(url: String, userAgent: String?, disposition: String?, mime: String?) {
         if (!trusted() || !WebFilePolicy.sameOrigin(url, trustedOrigin)) { notifyUser("请在浏览器中打开外部下载链接"); return }
-        offer(Download(null, url, WebFilePolicy.safeName(URLUtil.guessFileName(url, disposition, mime))), mime ?: "application/octet-stream")
+        offer(Download(null, url, WebFilePolicy.safeName(URLUtil.guessFileName(url, disposition, mime)), openAfter = downloadOpenAfter()), mime ?: "application/octet-stream")
     }
     private fun offer(next: Download, mime: String) {
         if (download != null) { notifyUser("已有文件正在保存，请稍后再试"); return }
+        next.mime = downloads.mime(next.name, mime)
         download = next
         written = 0
-        RunLog.info("Download", "save destination requested; blob=${next.token != null}")
-        val mediaType = mime.substringBefore(';').trim().takeIf { it.matches(Regex("[a-zA-Z0-9.+-]+/[a-zA-Z0-9.+-]+")) } ?: "application/octet-stream"
-        runCatching { launchSave(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mediaType).putExtra(Intent.EXTRA_TITLE, next.name)) }
-            .onFailure { finishDownload(false) }
+        if(android.os.Build.VERSION.SDK_INT >= 29) {
+            downloadJob = scope.launch(Dispatchers.IO) {
+                val created = runCatching { downloads.begin(next.name,next.mime,next.session,next.conversation) }
+                withContext(NonCancellable + Dispatchers.Main) {
+                    created.onSuccess { file ->
+                        if(download !== next) downloads.abort(file)
+                        else { next.file=file; destinationChosen(Activity.RESULT_OK, Uri.parse(file.uri)) }
+                    }.onFailure { if(download === next) finishDownload(false) }
+                }
+            }
+        } else runCatching {
+            launchSave(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(next.mime)
+                .putExtra(Intent.EXTRA_TITLE,next.name)
+                .putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")))
+        }.onFailure { finishDownload(false) }
     }
-    @JavascriptInterface fun offerBlob(authority: String, token: String, name: String, mime: String, size: Long): Boolean {
-        if (authority != exportAuthority || !WebFilePolicy.validBlobOffer(token, size) || download != null || !offerPending.compareAndSet(false, true)) return false
-        main.post { try { if (trusted()) offer(Download(token, null, WebFilePolicy.safeName(name), size), mime) else releaseBlob(token) } finally { offerPending.set(false) } }
+    @JavascriptInterface fun offerBlob(authority: String, token: String, name: String, mime: String, size: Long): Boolean =
+        offerFile(authority,token,name,mime,size,"{}")
+    @JavascriptInterface fun offerFile(authority: String, token: String, name: String, mime: String, size: Long, metadata: String): Boolean {
+        if (authority != exportAuthority || metadata.length > 8192 || !WebFilePolicy.validBlobOffer(token, size) || download != null || !offerPending.compareAndSet(false, true)) return false
+        val meta=runCatching { JSONObject(metadata) }.getOrNull()
+        main.post { try {
+            if (trusted()) offer(Download(token,null,WebFilePolicy.safeName(name),size,
+                meta?.optString("session").orEmpty().take(256),meta?.optString("conversation").orEmpty().take(512),downloadOpenAfter()),mime)
+            else releaseBlob(token)
+        } finally { offerPending.set(false) } }
         return true
     }
     fun destinationChosen(result: Int, uri: Uri?) {
         val job = download ?: return
         if (result != Activity.RESULT_OK || uri?.scheme != "content") { finishDownload(false, cancelled = true); return }
+        if(job.file == null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+            job.file = runCatching { downloads.trackDestination(uri,job.name,job.mime,job.session,job.conversation) }.getOrElse { finishDownload(false); return }
+        }
         notifyUser("正在保存文件，请保持页面连接")
         if (job.token != null) {
-            scope.launch(Dispatchers.IO) {
+            downloadJob = scope.launch(Dispatchers.IO) {
                 runCatching {
-                    synchronized(this@WebCapabilities) { output = context.contentResolver.openOutputStream(uri, "w") ?: error("No destination"); written = 0 }
-                }.onSuccess { withContext(Dispatchers.Main) { view?.evaluateJavascript("window.__DSH_FILE_SEND__&&window.__DSH_FILE_SEND__(${JSONObject.quote(job.token)})", null) } }
-                    .onFailure { main.post { finishDownload(false) } }
+                    synchronized(this@WebCapabilities) { check(download === job); output = context.contentResolver.openOutputStream(uri, "w") ?: error("No destination"); written = 0 }
+                }.onSuccess { withContext(Dispatchers.Main) { if(download === job) view?.evaluateJavascript("window.__DSH_FILE_SEND__&&window.__DSH_FILE_SEND__(${JSONObject.quote(job.token)})", null) } }
+                    .onFailure { main.post { if(download === job) finishDownload(false) } }
             }
         } else {
             // Cookies go only to the selected origin. Redirects cannot leak them elsewhere.
@@ -188,7 +220,7 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
                     }
                     check(saved) { "Too many redirects" }
                 }.isSuccess
-                withContext(Dispatchers.Main) { finishDownload(success) }
+                withContext(Dispatchers.Main) { if(download === job) finishDownload(success) }
             }
         }
     }
@@ -207,12 +239,24 @@ class WebCapabilities(private val context: Context, private val scope: Coroutine
     }
     private fun releaseBlob(token: String) { view?.evaluateJavascript("window.__DSH_FILE_DROP__&&window.__DSH_FILE_DROP__(${JSONObject.quote(token)})", null) }
     private fun finishDownload(success: Boolean, cancelled: Boolean = false) {
-        synchronized(this) { runCatching { output?.close() }; output = null }
+        val closed = synchronized(this) { runCatching { output?.close() }.isSuccess.also { output=null } }
         val job = download ?: return
         download = null
         job.token?.let { releaseBlob(it) }
-        RunLog.info("Download", "save completed success=$success cancelled=$cancelled bytes=$written")
-        if (!cancelled) notifyUser(if (success) "文件已保存到所选位置" else "保存失败，请重试；目标位置可能留有未完成文件")
+        val bytes=written
+        // Completion must survive disposal of the WebView and its composition scope.
+        CoroutineScope(Dispatchers.IO).launch {
+            val file=job.file
+            val saved=if(success && closed && file!=null) runCatching { downloads.complete(file,bytes) }.getOrNull() else null
+            if(saved==null && file!=null) downloads.abort(file)
+            withContext(Dispatchers.Main) {
+                if(saved!=null) {
+                    notifyUser("下载完成，可在设置 → 已下载文件中查看")
+                    if(job.openAfter) runCatching { downloads.open(saved) }.onFailure { notifyUser("文件已下载，但没有可用的打开应用，请在已下载文件中重试") }
+                } else if(!cancelled) notifyUser("下载失败，请保持连接后重试")
+            }
+        }
+        RunLog.info("Download", "transfer finished success=$success cancelled=$cancelled bytes=$bytes")
     }
     fun pageNavigating() {
         upload?.onReceiveValue(null); upload = null; audio?.deny(); audio = null

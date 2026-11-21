@@ -28,6 +28,7 @@ fun BackNavigationHost(
     enabled: Boolean,
     predictive: Boolean,
     consumeBack: ((Boolean) -> Unit) -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     val activity = LocalContext.current as? Activity
@@ -80,7 +81,7 @@ fun BackNavigationHost(
             throw cancelled
         } finally { gesture.reset() }
     }
-    Box(Modifier.fillMaxSize().background(com.dsh.mobile.ui.theme.LocalShellSurface.current.background)) {
+    Box(modifier.fillMaxSize().background(com.dsh.mobile.ui.theme.LocalShellSurface.current.background)) {
         CompositionLocalProvider(LocalAppPredictiveBack provides predictive,LocalBackGestureState provides gesture) {
             Box(Modifier.fillMaxSize().backGesturePreview(gesture)) { content() }
         }

@@ -7,4 +7,9 @@
 <exclude domain="sharedpref" path="dsh_overlay_draft.xml" />
 <!-- 实验功能「对话本地缓存」：对话正文（含工具输出）属敏感内容，绝不进云备份或设备迁移。 -->
 <exclude domain="file" path="chat-archive/" />
+<!-- Local document URIs and grants do not transfer to another installation. -->
+<exclude domain="database" path="downloads.db" />
+<exclude domain="database" path="downloads.db-journal" />
+<exclude domain="database" path="downloads.db-wal" />
+<exclude domain="database" path="downloads.db-shm" />
 </full-backup-content>

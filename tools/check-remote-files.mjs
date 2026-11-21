@@ -14,6 +14,8 @@ async function verify(source, sessionSource) {
   const wait = () => new Promise(resolve => setTimeout(resolve, 80));
   const assert = (name, condition) => { checks.push({name, passed: !!condition}); };
   let offered, version = 'one', calls = [], includeTime = true;
+  let openAfter=true;
+  page.__DSH_FILE_OPTIONS__={getOpenAfter:()=>openAfter,setOpenAfter:value=>{openAfter=value}};
   page.DshFiles = {localAppearancePalette: () => JSON.stringify({surface: '#f2f4f7', foreground: '#20242c', muted: '#515867'})};
   const valueResponse = value => new Response(JSON.stringify({result: {ok: true, value}}),
     {headers: {'content-type': 'application/json'}});
@@ -55,9 +57,13 @@ async function verify(source, sessionSource) {
     await wait();
     assert('file row shows real modification date and size',
       dialog().querySelector('[data-pal-file-meta]').textContent.includes('2025/04/03') && dialog().querySelector('[data-pal-file-meta]').textContent.includes('3 B'));
+    const option = dialog().querySelector('input[type=checkbox]');
+    assert('download dialog defaults to open-after checked', option.checked);
+    option.checked=false; option.dispatchEvent(new page.Event('change'));
+    assert('download dialog remembers an unchecked option', openAfter===false);
     const detail = dialog().querySelector('[data-pal-file-meta]');
     assert('file metadata remains inside its row in a short scroll area',
-      detail.getBoundingClientRect().bottom <= detail.parentElement.getBoundingClientRect().bottom - 8);
+      detail.getBoundingClientRect().bottom <= detail.closest("[data-pal-session-file]").getBoundingClientRect().bottom - 8);
     click('下载 · fixture.bin');
     await wait();
     assert('file selection offers original filename and size', offered?.name === 'fixture.bin' && offered.source.size === 3);

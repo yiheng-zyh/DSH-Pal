@@ -23,6 +23,23 @@ class SettingsStore(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    var portraitHideStatusBar: Boolean
+        get() = prefs.getBoolean("portrait_hide_status_bar", false)
+        set(value) { prefs.edit { putBoolean("portrait_hide_status_bar", value) } }
+    var portraitCollapseConnectionBar: Boolean
+        get() = prefs.getBoolean("portrait_collapse_connection_bar", false)
+        set(value) { prefs.edit { putBoolean("portrait_collapse_connection_bar", value) } }
+    fun observeDisplayChrome(onChanged: () -> Unit): () -> Unit {
+        val listener=SharedPreferences.OnSharedPreferenceChangeListener {_,key ->
+            if(key=="portrait_hide_status_bar" || key=="portrait_collapse_connection_bar") onChanged()
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return {prefs.unregisterOnSharedPreferenceChangeListener(listener)}
+    }
+    var downloadOpenAfter: Boolean
+        get() = prefs.getBoolean("download_open_after", true)
+        set(value) { prefs.edit { putBoolean("download_open_after", value) } }
+
     private val prefix = if (com.dsh.mobile.BuildConfig.USB_DEVELOPMENT) "usb_" else ""
 
     data class WebCompatibility(val originalPage: Boolean = false, val pausedPlugins: Set<String> = emptySet())

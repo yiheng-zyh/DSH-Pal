@@ -50,3 +50,17 @@ await failed.context.__DSH_FILE_SEND__('fixture-token-123456');
 assert.deepEqual(failed.finished, [false]);
 assert.throws(() => page(false).context.__DSH_OFFER_REMOTE_FILE__({size: 1}, 'busy.bin'));
 console.log('PASS binary streaming, bounded chunks, empty files, changed files and rejected offers');
+
+const modern = page();
+let offeredContext, remembered = true;
+modern.context.DshFiles.offerFile = (authority, token, name, mime, size, metadata) => { offeredContext = JSON.parse(metadata); return true; };
+modern.context.DshFiles.downloadOpenAfter = () => remembered;
+modern.context.DshFiles.setDownloadOpenAfter = (authority, value) => { remembered = value; };
+assert.equal(modern.context.__DSH_FILE_OPTIONS__.getOpenAfter(), true);
+modern.context.__DSH_FILE_OPTIONS__.setOpenAfter(false);
+assert.equal(modern.context.__DSH_FILE_OPTIONS__.getOpenAfter(), false);
+modern.context.__DSH_OFFER_REMOTE_FILE__({size: 0, context: {session: 'session-one', conversation: 'Current chat'}}, 'context.txt');
+assert.deepEqual(offeredContext, {session: 'session-one', conversation: 'Current chat'});
+await modern.context.__DSH_FILE_SEND__('fixture-token-123456');
+assert.deepEqual(modern.finished, [true]);
+console.log('PASS remembered open-after option and conversation metadata');

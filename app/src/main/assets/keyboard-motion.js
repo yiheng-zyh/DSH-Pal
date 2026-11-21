@@ -57,6 +57,8 @@
       var next = Math.max(0, pixels / ((window.devicePixelRatio || 1) * (window.visualViewport ? window.visualViewport.scale : 1)));
       var seat = document.querySelector('[data-dsh-mobile-center] [data-composer-seat]');
       if (!seat || Math.abs(next - offset) < .5) return;
+      // Short landscape windows need the conversation space while the IME is up.
+      seat.toggleAttribute('data-dsh-ime-open', next > 0);
       var scroller = seat.closest('[data-conversation-scroll]');
       var flow = scroller && scroller.querySelector('[data-chat-flow]');
       var current = getComputedStyle(seat).translate;

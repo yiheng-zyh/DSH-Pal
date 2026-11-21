@@ -420,3 +420,32 @@ body:has([data-dsh-mobile-frame]) .we-rope { display:none!important; }
     background-color:rgba(127,127,127,.16);
   }
 }
+
+/* Short touch windows use horizontal space to preserve readable conversation height. */
+@media (max-width:900px) and (max-height:500px) and (orientation:landscape) and (pointer:coarse) {
+  [data-dsh-mobile-header] {
+    grid-template-columns:minmax(90px,1fr) auto minmax(60px,auto) auto 36px!important;
+    grid-template-rows:40px!important; grid-auto-rows:40px!important;
+    padding:0 8px 0 48px!important; gap:0 8px!important; min-height:40px!important;
+  }
+  [data-dsh-mobile-header] [class$="_crumbs"] { grid-column:1!important;grid-row:1!important;padding-left:0!important; }
+  [data-dsh-mobile-header] [class$="_tabs"] { grid-column:2!important;grid-row:1!important;min-width:120px!important;max-width:210px!important; }
+  [data-dsh-mobile-header] [class$="_headerActions"] { grid-column:3!important;grid-row:1!important;max-width:360px!important; }
+  [data-dsh-mobile-header] [class$="_headerCorner"] { grid-column:5!important;grid-row:1!important; }
+  [data-dsh-mobile-header] [class$="_headerUtilities"] { grid-column:4!important;grid-row:1!important;max-width:148px!important; }
+  [data-dsh-mobile-center] [data-composer-card] { display:grid!important;grid-template-columns:minmax(120px,1fr) minmax(280px,auto)!important;align-items:center!important;margin-top:2px!important; }
+  [data-dsh-mobile-center] [data-input-scroll] { grid-column:1!important;grid-row:2!important;min-height:40px!important;max-height:26dvh!important;padding:6px 12px!important; }
+  [data-dsh-mobile-center] [data-composer-card] > [class$="_row"] { grid-column:2!important;grid-row:2!important;min-height:44px!important;max-width:390px!important;padding:4px 8px!important; }
+  [data-dsh-mobile-center] [data-composer-card] > [data-slot="conversation.input.attachments"] { grid-column:1/-1!important; }
+  [data-dsh-mobile-center] [data-composer-dock] { padding-top:0!important;padding-bottom:2px!important; }
+  [data-dsh-mobile-center] [class$="_composerSeat"] [role="textbox"] {font-size:15px!important;line-height:22px!important;min-height:28px!important;}
+  [data-dsh-mobile-frame] > .dsh-mobile-sidebar-entry,
+  [data-dsh-mobile-frame] > .dsh-mobile-right-entry {top:0!important;}
+}
+
+@media (max-width:900px) and (max-height:500px) and (orientation:landscape) and (pointer:coarse) {
+  [data-dsh-mobile-frame]:has([data-composer-seat][data-dsh-ime-open]) [data-dsh-mobile-header],
+  [data-dsh-mobile-frame]:has([data-composer-seat][data-dsh-ime-open]) > .dsh-mobile-sidebar-entry,
+  [data-dsh-mobile-frame]:has([data-composer-seat][data-dsh-ime-open]) > .dsh-mobile-right-entry,
+  [data-dsh-mobile-center] [data-composer-seat][data-dsh-ime-open] [data-composer-dock] { display:none!important; }
+}

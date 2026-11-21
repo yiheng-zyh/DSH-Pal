@@ -37,14 +37,14 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-internal fun SettingsSearch(value: String, onChange: (String) -> Unit) {
+internal fun SettingsSearch(value: String, hintText: String = "搜索设置", onChange: (String) -> Unit) {
     val scheme = MiuixTheme.colorScheme
     val hint = settingsSecondary()
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = true,
         textStyle = TextStyle(color = scheme.onBackground, fontSize = 15.sp),
         cursorBrush = SolidColor(scheme.onBackground),
-        modifier = Modifier.fillMaxWidth().padding(bottom = 22.dp).semantics { contentDescription = "搜索设置" },
+        modifier = Modifier.fillMaxWidth().padding(bottom = if(androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp<480)8.dp else 22.dp).semantics { contentDescription = hintText },
         decorationBox = { input ->
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
                 .background(lerp(scheme.background, scheme.onBackground, .09f))) {
@@ -56,7 +56,7 @@ internal fun SettingsSearch(value: String, onChange: (String) -> Unit) {
                         drawLine(hint, Offset(size.width * .64f, size.height * .64f), Offset(size.width * .88f, size.height * .88f), stroke, StrokeCap.Round)
                     }
                     Box(Modifier.weight(1f)) {
-                        if (value.isEmpty()) Text("搜索设置", color = hint, fontSize = 15.sp)
+                        if (value.isEmpty()) Text(hintText, color = hint, fontSize = 15.sp)
                         input()
                     }
                 }

@@ -57,7 +57,7 @@
   function button(label, action) {
     var item = document.createElement('button');
     item.type = 'button'; item.textContent = label;
-    item.style.cssText = 'font:inherit;color:inherit;background:transparent;border:1px solid #8886;border-radius:10px;padding:12px;text-align:left;overflow-wrap:anywhere;min-height:44px;flex-shrink:0;cursor:pointer';
+    item.style.cssText = 'font:inherit;color:inherit;background:transparent;border:1px solid #8886;border-radius:22px;padding:8px 16px;text-align:left;overflow-wrap:anywhere;min-height:44px;flex-shrink:0;cursor:pointer';
     item.onclick = action;
     return item;
   }
@@ -96,21 +96,42 @@
     host.style.setProperty('color', palette.foreground, 'important');
     host.style.setProperty('opacity', '1', 'important');
     var backdrop = document.createElement('style');
-    backdrop.textContent = '[data-pal-file-dialog]::backdrop{background:rgba(0,0,0,.65)!important}';
+    backdrop.textContent = '[data-pal-file-dialog]::backdrop{background:rgba(0,0,0,.65)!important}' +
+      '[data-pal-file-dialog][open]{display:flex!important;flex-direction:column!important;max-height:calc(100dvh - 32px)!important;overflow:hidden!important}' +
+      '[data-pal-file-dialog] [data-pal-file-list]{min-height:48px;flex:1 1 auto}' +
+      '[data-pal-file-dialog] button:active{background:#8882!important}' +
+      '@media(orientation:landscape) and (max-height:500px){[data-pal-file-dialog][open]{width:calc(100% - 40px)!important;max-width:760px!important;padding:12px 16px!important;gap:0!important}' +
+      '[data-pal-file-dialog] h2{font-size:16px!important;margin-bottom:2px!important}' +
+      '[data-pal-file-dialog] [data-pal-file-option]{min-height:32px!important;margin:0!important}' +
+      '[data-pal-file-dialog] [role=status]{margin:2px 0!important}}';
     host.append(backdrop);
     var heading = document.createElement('h2');
+    heading.tabIndex=-1;
+    heading.style.outline='none';
     heading.textContent = file ? '下载文件到手机' : '当前对话的文件'; heading.style.cssText = 'font-size:18px;margin:0 0 8px';
     var note = document.createElement('p');
-    note.textContent = '点文件名在侧栏预览，点「下载」保存到手机。';
+    note.textContent = '点文件名在侧栏预览，点「下载」保存到手机 Download 文件夹。';
     note.style.cssText = 'margin:0 0 12px;font-size:13px';
     note.style.color = palette.muted;
+    var openOption = document.createElement('label');
+    openOption.setAttribute('data-pal-file-option','');
+    openOption.style.cssText = 'display:flex;align-items:center;gap:8px;min-height:44px;margin-right:auto;font-size:13px;cursor:pointer;white-space:nowrap';
+    openOption.title = '记住此选择，下次下载继续使用';
+    var openCheck = document.createElement('input'); openCheck.type = 'checkbox';
+    openCheck.checked = window.__DSH_FILE_OPTIONS__ ? window.__DSH_FILE_OPTIONS__.getOpenAfter() : true;
+    openCheck.style.cssText = 'width:20px;height:20px;flex-shrink:0';
+    openCheck.addEventListener('change', function() {
+      if (window.__DSH_FILE_OPTIONS__) window.__DSH_FILE_OPTIONS__.setOpenAfter(openCheck.checked);
+    });
+    openOption.append(openCheck, document.createTextNode('下载后打开'));
     var status = document.createElement('p');
     status.setAttribute('role', 'status');
     status.style.cssText = 'margin:8px 0;overflow-wrap:anywhere;font-size:13px';
     var list = document.createElement('div');
+    list.setAttribute('data-pal-file-list','');
     list.style.cssText = 'display:flex;flex-direction:column;gap:8px;max-height:48dvh;overflow:auto;overscroll-behavior:contain;touch-action:pan-y';
     var controls = document.createElement('div');
-    controls.style.cssText = 'display:flex;gap:8px;margin-top:14px';
+    controls.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px;flex-shrink:0';
     var generation = 0, busy = false;
     function message(value) { status.textContent = value; }
     function fail(error) {
@@ -134,7 +155,7 @@
         } catch (error) { fail(error); }
       });
       title.setAttribute('aria-label', '在侧栏预览 ' + name);
-      title.style.cssText += ';display:block;width:100%;border:0;padding:0;font-weight:600';
+      title.style.cssText += ';display:block;width:100%;border:0;padding:0;font-size:15px;line-height:1.5;min-height:0;font-weight:600';
       item.append(title);
       var description = document.createElement('div');
       description.textContent = value.description || path.replace(/\\/g, '/').split('/').slice(0, -1).join('/');
@@ -144,12 +165,13 @@
       var detail = document.createElement('span');
       detail.setAttribute('data-pal-file-meta', '');
       detail.textContent = value.modifiedAt ? fileDetails(value) : '正在读取修改时间…';
-      detail.style.cssText = 'display:block;margin-top:6px;font-size:12px;line-height:1.6';
+      detail.style.cssText = 'display:block;font-size:12px;line-height:1.6;flex:1;min-width:0';
       detail.style.color = palette.muted;
       var download = button('下载', function() { save(path); });
       download.setAttribute('aria-label', label);
-      download.style.cssText += ';margin-top:10px;padding:6px 14px';
-      item.append(detail, download);
+      download.style.cssText += ';padding:6px 16px;min-height:40px;border-radius:20px;font-size:13px;text-align:center';
+      var footer = document.createElement('div');footer.style.cssText='display:flex;gap:12px;align-items:center;margin-top:10px';
+      footer.append(detail,download);item.append(footer);
       return {item: item, detail: detail, path: path};
     }
     function loadFileDetails(items, token) {
@@ -193,6 +215,9 @@
         var originalOrigin = location.origin;
         window.__DSH_OFFER_REMOTE_FILE__({
           size: stat.bytes,
+          context: {session: session, conversation: (function() {
+            try { return clientService('sessions').list.getSnapshot().byId[session].title || ''; } catch (_) { return ''; }
+          })()},
           read: async function(offset, length) {
             if (location.origin !== originalOrigin) throw Error('连接已变化');
             var answer = await rpc(session, 'readBytes', filePath, {range: {offset: offset, length: length}});
@@ -229,7 +254,7 @@
         message(files.length ? '当前对话共 ' + files.length + ' 个文件' : '这条对话还没有记录到生成或交付的文件。');
       } catch (error) { if (dialog === host && token === generation) fail(error); }
     }
-    controls.append(button('刷新', function() {
+    controls.append(openOption, button('刷新', function() {
       if (!session) return;
       if (file && file.path) {
         loadFileDetails([row], generation);
@@ -240,6 +265,7 @@
     document.body.append(host);
     host.addEventListener('cancel', function(event) { event.preventDefault(); close(); });
     host.showModal();
+    heading.focus({preventScroll:true});
     if (session && file && file.path) {
       message(file.path);
       var row = fileItem(file.path, '下载到手机', {});

@@ -1,5 +1,9 @@
 package com.dsh.mobile.ui
 
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.displayCutout
+
 import android.webkit.WebView
 import com.dsh.mobile.ui.AppBackHandler as BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -324,10 +328,17 @@ fun DshMobileApp(
         else -> shellLoading
     }
 
+    val landscapeChrome=androidx.compose.ui.platform.LocalConfiguration.current.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    var portraitHideStatusBar by remember { mutableStateOf(settings.portraitHideStatusBar) }
+    androidx.compose.runtime.DisposableEffect(settings) {val stop=settings.observeDisplayChrome {portraitHideStatusBar=settings.portraitHideStatusBar};onDispose {stop()}}
+    val hideStatusBar=landscapeChrome || portraitHideStatusBar
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect {
         val window = (view.context as? android.app.Activity)?.window ?: return@SideEffect
         androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+            systemBarsBehavior=androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if(hideStatusBar) hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            else show(androidx.core.view.WindowInsetsCompat.Type.statusBars())
             isAppearanceLightStatusBars = showsLightSurfaces
             isAppearanceLightNavigationBars = showsLightSurfaces
         }
@@ -336,6 +347,8 @@ fun DshMobileApp(
     DshTheme(appearance=com.dsh.mobile.core.LocalAppearance.fromId(appearance)) {
         BackNavigationHost(enabled=!showDiagnostics&&!openConnectionList&&!addingConnection&&!switching,
             predictive=predictiveBack,
+            modifier=if(hideStatusBar && !landscapeChrome) Modifier.consumeWindowInsets(
+                androidx.compose.foundation.layout.WindowInsets.displayCutout.only(androidx.compose.foundation.layout.WindowInsetsSides.Top)) else Modifier,
             consumeBack={ result ->
                 val web=activeWebView
                 if(web==null||configuredOrigin.isBlank())result(false) else web.evaluateJavascript("""(function(){if(window.__DSH_SIDEBAR_NAV__&&__DSH_SIDEBAR_NAV__.dismissAccountMenu())return true;var f=document.querySelector('[data-dsh-mobile-frame]');if(!f)return false;var rail=f.querySelector('[data-dsh-mobile-right]');var p=window.__DSH_INTERACTION__;var r=p?p.rightClose(rail):rail&&rail.querySelector('button[data-sidebar-right-toggle],button[aria-label="收起右侧边栏"],button[aria-label="Close right sidebar"]');if(f.hasAttribute('data-dsh-mobile-right-open')&&r){r.click();return true;}var s=f.querySelector('[data-dsh-mobile-sidebar]');if(s&&!f.hasAttribute('data-sidebar-collapsed')&&!f.hasAttribute('data-dsh-left-closed')){if(window.__DSH_SIDEBAR_NAV__&&__DSH_SIDEBAR_NAV__.closeDrawer())return true;var b=p?p.leftToggle(s):s.querySelector('button[aria-label="收起侧边栏"],button[aria-label="Close sidebar"]');if(b){b.click();return true;}}return false;})()""") { result(it=="true") }

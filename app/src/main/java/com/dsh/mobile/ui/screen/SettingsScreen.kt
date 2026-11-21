@@ -70,7 +70,7 @@ import androidx.compose.animation.core.tween
 
 private enum class SettingsPage(val title: String) {
     Compatibility("网页兼容与排查"),
-    Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Channel("通道自动选路"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), Updates("更新与公告"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
+    Home("设置"), Companion("悬浮助手"), CompanionStyle("文字框样式"), Connection("设备与连接"), Channel("通道自动选路"), Appearance("外观"), Notifications("通知与后台"), Cache("缓存与加载"), Downloads("已下载文件"), Diagnostics("支持与诊断"), Logs("日志记录"), About("关于"), Updates("更新与公告"), NotificationControls("通知选项"), NotificationSupport("通知能力检测"), NotificationDemo("通知演示")
 }
 
 private data class SettingsDestination(val page: SettingsPage?, val title: String, val detail: String, val keywords: String = "")
@@ -86,6 +86,7 @@ private val settingsDestinations = listOf(
         SettingsDestination(SettingsPage.Notifications, "通知与后台", "灵动岛、任务进度与后台连接", "权限 震动"),
     ),
     "网页与数据" to listOf(
+        SettingsDestination(SettingsPage.Downloads, "已下载文件", "查找、打开与清理手机下载的文件", "下载 文件 大小 时间 对话 排序"),
         SettingsDestination(SettingsPage.Compatibility, "网页兼容与排查", "恢复 DSH 原始网页、暂停指定插件", "遮罩 点不动 停用 诊断"),
         SettingsDestination(SettingsPage.Cache, "缓存与数据", "查看资源复用、管理离线记录与站点数据", "网页资源 清理 Cookie 草稿"),
     ),
@@ -186,18 +187,27 @@ fun SettingsScreen(
         ) { section ->
         pageStates.SaveableStateProvider(section.name) {
         if(section==SettingsPage.Cache) com.dsh.mobile.ui.BackGestureSurface {CacheManagementScreen(settings,webView,{page=SettingsPage.Home},onReloadPage)}
+        else if(section==SettingsPage.Downloads) com.dsh.mobile.ui.BackGestureSurface {DownloadsScreen(){page=SettingsPage.Home}}
         else if(section==SettingsPage.Logs) com.dsh.mobile.ui.BackGestureSurface {LogSettingsScreen{page=SettingsPage.Diagnostics}}
         else if(section==SettingsPage.About) com.dsh.mobile.ui.BackGestureSurface {AboutScreen{page=SettingsPage.Home}}
         else if(section==SettingsPage.Updates) com.dsh.mobile.ui.BackGestureSurface {UpdatesScreen{page=SettingsPage.Home}}
         else {
+        val compactSettings=androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp<480
         Column(Modifier.fillMaxSize().safeDrawingPadding(),horizontalAlignment=Alignment.CenterHorizontally) {
+            if(compactSettings && section==SettingsPage.Home) {
+                Row(Modifier.widthIn(max=1000.dp).fillMaxWidth().padding(horizontal=20.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {AppPageHeader(section.title) {onBack()}}
+                    Box(Modifier.weight(1f).padding(start=24.dp)) {SettingsSearch(settingsQuery){settingsQuery=it}}
+                }
+            } else {
             Column(Modifier.widthIn(max=680.dp).fillMaxWidth().padding(horizontal=20.dp,vertical=12.dp)) {
                 AppPageHeader(section.title) { if(section==SettingsPage.Home)onBack()else page=parent() }
             }
             if (section == SettingsPage.Home) Box(Modifier.widthIn(max = 680.dp).padding(horizontal = 20.dp)) {
                 SettingsSearch(settingsQuery) { settingsQuery = it }
             }
-        Column(Modifier.weight(1f).widthIn(max=680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=20.dp)) {
+            }
+        Column(Modifier.weight(1f).widthIn(max=if(compactSettings)1000.dp else 680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=20.dp)) {
             if (section == SettingsPage.Home) {
                 val query = settingsQuery.trim()
                 val results = settingsDestinations.map { (sectionTitle, items) ->
@@ -206,7 +216,8 @@ fun SettingsScreen(
                     }
                 }.filter { it.second.isNotEmpty() }
                 if (results.isEmpty()) SettingsHint("没有找到相关设置。")
-                for ((sectionTitle, items) in results) SettingsGroup(sectionTitle) {
+                val groups: @Composable (List<Pair<String,List<SettingsDestination>>>) -> Unit = { entries ->
+                for ((sectionTitle, items) in entries) SettingsGroup(sectionTitle) {
                     items.forEachIndexed { index, item ->
                         if (index > 0) SettingsDivider()
                         SettingsItem(item.title, item.detail) {
@@ -215,6 +226,12 @@ fun SettingsScreen(
                         }
                     }
                 }
+                }
+                if(compactSettings) Row(horizontalArrangement=Arrangement.spacedBy(20.dp)) {
+                    Column(Modifier.weight(1f)) {groups(results.filterIndexed {index,_->index%2==0})}
+                    Column(Modifier.weight(1f)) {groups(results.filterIndexed {index,_->index%2==1})}
+                } else groups(results)
+
             }
 
             if(section==SettingsPage.Compatibility) WebCompatibilitySettings(settings, webView)
@@ -238,6 +255,16 @@ fun SettingsScreen(
                 }
             }
             if (section == SettingsPage.Appearance) {
+                var hideBar by remember {mutableStateOf(settings.portraitHideStatusBar)}
+                var collapseBar by remember {mutableStateOf(settings.portraitCollapseConnectionBar)}
+                SettingsGroup("屏幕空间") {
+                    Column(Modifier.padding(horizontal=16.dp)) {
+                        ToggleRow("竖屏隐藏系统状态栏","隐藏顶部时间与电量，从屏幕上沿下滑可临时查看",hideBar) {hideBar=it;settings.portraitHideStatusBar=it}
+                        SettingsDivider()
+                        ToggleRow("竖屏收起连接信息条","保留小入口，点「连接与工具」展开下载、刷新和设置",collapseBar) {collapseBar=it;settings.portraitCollapseConnectionBar=it}
+                    }
+                }
+                SettingsHint("横屏自动隐藏系统状态栏并收起连接信息条，切回竖屏遵循以上选项。")
                 SettingsGroup("交互") {
                     Column(Modifier.padding(horizontal = 16.dp)) {
                         if(android.os.Build.VERSION.SDK_INT>=34) {
