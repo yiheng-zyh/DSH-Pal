@@ -42,6 +42,9 @@ class SettingsStore(context: Context) {
     var computerMonitorOverlay: Boolean
         get() = prefs.getBoolean("computer_monitor_overlay",false)
         set(value) {prefs.edit {putBoolean("computer_monitor_overlay",value)}}
+    var computerMonitorStyle: String
+        get() = prefs.getString("computer_monitor_style","curve").takeIf{it=="rings"} ?: "curve"
+        set(value) {prefs.edit {putString("computer_monitor_style",if(value=="rings")"rings" else "curve")}}
     var computerMonitorX: Float
         get() = prefs.getFloat("computer_monitor_x",.05f).coerceIn(0f,1f)
         set(value) {prefs.edit {putFloat("computer_monitor_x",value.coerceIn(0f,1f))}}
@@ -389,7 +392,7 @@ class SettingsStore(context: Context) {
 
     /** Observe live controls across SettingsStore instances. Caller must unsubscribe. */
     fun observeRuntimePreferences(onChanged: () -> Unit): () -> Unit {
-        val watched = setOf(KEY_ISLAND, KEY_NOTIFICATION, KEY_BACKGROUND_LIVE, KEY_HAPTICS, KEY_RETRACT, "computer_monitor_overlay")
+        val watched = setOf(KEY_ISLAND, KEY_NOTIFICATION, KEY_BACKGROUND_LIVE, KEY_HAPTICS, KEY_RETRACT, "computer_monitor_overlay", "computer_monitor_style")
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> if (key in watched) onChanged() }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }

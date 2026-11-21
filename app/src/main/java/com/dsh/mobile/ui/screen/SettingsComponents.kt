@@ -111,7 +111,7 @@ internal fun SettingsDivider() {
 
 @Composable
 internal fun SettingsHint(text: String, modifier: Modifier = Modifier) {
-    Text(text, modifier, fontSize = 13.sp, lineHeight = 19.sp, color = settingsSecondary())
+    Text(text, modifier, fontSize = 12.sp, lineHeight = 18.sp, color = MiuixTheme.colorScheme.let { lerp(it.background, it.onBackground, .62f) })
 }
 
 @Composable

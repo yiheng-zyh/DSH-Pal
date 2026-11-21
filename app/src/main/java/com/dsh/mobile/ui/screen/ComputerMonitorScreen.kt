@@ -53,8 +53,11 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
     var query by remember {mutableStateOf("")}
     var sort by remember {mutableStateOf(ComputerMetric.CPU)}
     var selected by remember {mutableStateOf<ComputerProcess?>(null)}
-    val current=state.current;val gpu=current?.gpus?.find{it.id==gpuId} ?: current?.gpus?.firstOrNull()
-    val processes=remember(current?.processes,query,sort){current?.processes.orEmpty().filter {it.name.contains(query,true)||it.pid.toString()==query}.sortedByDescending {p->when(sort){ComputerMetric.CPU->p.cpu;ComputerMetric.GPU->p.gpu;ComputerMetric.RAM->p.memory;ComputerMetric.VRAM->p.dedicated} ?: -1.0}}
+    var showNotes by remember {mutableStateOf(false)}
+    val current=state.current;val gpu=computerGpu(current,gpuId)
+    LaunchedEffect(current?.instance) {gpuId=current?.gpus?.firstOrNull{it.load!=null||it.used!=null||it.shared!=null}?.id ?: current?.gpus?.firstOrNull()?.id}
+    val processes=remember(current?.processes,query,sort){current?.processes.orEmpty().filter {it.name.contains(query,true)||it.pid.toString()==query}.sortedByDescending {p->when(sort){ComputerMetric.CPU->p.cpu;ComputerMetric.GPU->p.gpu;ComputerMetric.RAM->p.memory;ComputerMetric.VRAM->p.dedicated;ComputerMetric.SHARED->p.shared} ?: -1.0}}
+    var overlayStyle by remember {mutableStateOf(settings.computerMonitorStyle)}
     var overlay by remember(revision) {mutableStateOf(settings.computerMonitorOverlay)}
     var hint by remember {mutableStateOf<String?>(null)}
     AppBackHandler {if(selected!=null)selected=null else onBack()}
@@ -74,7 +77,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                         Triple(ComputerMetric.CPU,monitorPercent(current?.cpu),"处理器占用"),
                         Triple(ComputerMetric.RAM,monitorBytes(current?.memory),"共 ${monitorBytes(current?.memoryTotal)}"),
                         Triple(ComputerMetric.GPU,monitorPercent(gpu?.load),"最忙引擎"),
-                        Triple(ComputerMetric.VRAM,monitorBytes(gpu?.used),"共 ${monitorBytes(gpu?.total)}")
+                        Triple(ComputerMetric.VRAM,monitorBytes(gpu?.used),if(gpu?.total==0.0)"未预留专用容量" else "共 ${monitorBytes(gpu?.total)}")
                     )
                     Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         tiles.chunked(if(compact)4 else 2).forEach {row->
@@ -87,10 +90,15 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                     }
                     Spacer(Modifier.height(8.dp))
                     if(gpu!=null)Text("${gpu.name}\n共享 GPU 内存 ${monitorBytes(gpu.shared)} / ${monitorBytes(gpu.sharedTotal)}",fontSize=12.sp,lineHeight=18.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
-                    else SettingsHint("GPU 信息未提供。请检查电脑驱动及新版远程访问工具。")
-                    if(current!=null&&current.gpus.size>1)Row(Modifier.horizontalScroll(rememberScrollState())) {current.gpus.forEachIndexed {i,g->Button(onClick={gpuId=g.id}){Text("GPU $i",fontSize=12.sp)}}}
-                    MonitorPlot(state.samples,metric,gpu?.id)
-                    SettingsHint("${metric.title}历史曲线。断开或暂停期间不补零；GPU 为最忙引擎，显存为专用显存。")
+                    else SettingsHint(if(gpuId!=null)"所选 GPU 暂不可用，请重新选择。" else "GPU 信息未提供。请检查电脑驱动及新版远程访问工具。")
+                    if(current!=null&&current.gpus.isNotEmpty()&&(current.gpus.size>1||gpu==null))Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {current.gpus.forEachIndexed {i,g->Button(onClick={gpuId=g.id}){Text((if(gpu?.id==g.id)"● " else "")+"GPU $i · ${g.name}",fontSize=12.sp)}}}
+                    if(gpu!=null) {
+                        if(gpu.load==null && gpu.used==null && gpu.shared==null)SettingsHint("此 GPU 暂无驱动计数器数据，可选择其他显卡；不表示占用为零。")
+                        Text((if(metric==ComputerMetric.SHARED)"● " else "")+"查看共享 GPU 内存曲线 ›",modifier=Modifier.padding(vertical=10.dp).clickable{metric=ComputerMetric.SHARED},fontSize=12.sp,color=MiuixTheme.colorScheme.primary)
+                        if(gpu.total==0.0)SettingsHint("系统未报告专用显存容量，可查看共享 GPU 内存。")
+                    }
+                    MonitorPlot(state.samples,metric,gpuId?:gpu?.id)
+                    SettingsHint("${metric.title}历史 · 中断留空 · 点上方指标切换曲线")
                 }
                 item {
                     SettingsGroup("总览刷新速度") {
@@ -100,7 +108,8 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                     Button(onClick={interval=value;settings.computerMonitorIntervalMs=value},modifier=Modifier.weight(1f)) {Text((if(interval==value)"● " else "")+label,fontSize=12.sp)}
                                 }
                             }
-                            SettingsHint("只加快 CPU、GPU、内存和显存。进程约 3 秒更新；网络较慢时按实际响应速度显示，不堆积请求。")
+                            Spacer(Modifier.height(8.dp))
+                            SettingsHint("总览按所选速度更新，进程约 3 秒更新。")
                         }
                     }
                     SettingsGroup("悬浮查看") {
@@ -113,14 +122,29 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                 if(DshLiveService.current()==null&&on)DshLiveService.start(context)
                                 DshLiveService.current()?.refreshMonitor()
                             }
-                        }}
+                        }
+                            Row(Modifier.fillMaxWidth().padding(bottom=12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                listOf("curve" to "面积曲线","rings" to "圆环仪表").forEach {(style,title)->
+                                    Button(onClick={overlayStyle=style;settings.computerMonitorStyle=style;DshLiveService.current()?.refreshMonitor()},modifier=Modifier.weight(1f)) {Text((if(overlayStyle==style)"● " else "")+title,fontSize=12.sp)}
+                                }
+                            }
+                            SettingsHint("圆环展示 CPU、GPU、内存及显存；长按图表切换显卡。")
+                            Spacer(Modifier.height(12.dp))
+                        }
                     }
                 }
                 item {
                     SettingsSearch(query,"搜索进程名或 PID") {query=it}
-                    Text("电脑进程 · ${processes.size} 项",fontSize=16.sp)
+                    Text("电脑进程 · ${processes.size} 项",fontSize=16.sp,fontWeight=androidx.compose.ui.text.font.FontWeight.Medium)
                     Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)) {ComputerMetric.entries.forEach {m->Button(onClick={sort=m}){Text((if(sort==m)"↓ " else "")+m.title,fontSize=12.sp)}}}
-                    SettingsHint("按列降序，点进程看单独曲线。内存为工作集；专用显存可能由多个进程共享。DSH 对话不能与进程占用一一对应。")
+                    Spacer(Modifier.height(8.dp))
+                    SettingsHint("按所选指标降序排列，点进程查看详情。GPU 与显存为进程跨显卡统计。")
+                    Text(if(showNotes)"收起指标说明 ⌃" else "指标说明 ⌄",modifier=Modifier.padding(vertical=10.dp).clickable{showNotes=!showNotes},fontSize=12.sp,color=MiuixTheme.colorScheme.primary)
+                    if(showNotes)Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(MiuixTheme.colorScheme.onBackground.copy(alpha=.04f)).padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        SettingsHint("采样：网络较慢时按实际响应显示，不堆积请求；中断期间不补零。")
+                        SettingsHint("GPU：总览按所选显卡分别显示；暂不可读的指标显示未提供。共享 GPU 内存来自系统内存，上限不是已预占，不应与系统内存重复相加。")
+                        SettingsHint("进程：GPU取跨显卡最忙引擎，专用/共享显存为跨显卡统计，不跟随总览显卡切换。进程内存是工作集，显存可能重复计入，不能简单相加；DSH 对话与进程没有一一对应关系。")
+                    }
                 }
                 if(processes.isEmpty())item {SettingsHint(if(current==null)"等待读取电脑数据。此功能需更新电脑端 Pal 远程访问工具，目前采集端支持 Windows。" else "没有匹配的可读取进程。部分系统保护进程无法读取。")}
                 items(processes,key={it.identity}) {p->
@@ -142,6 +166,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
             Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(4.dp)) {ComputerMetric.entries.forEach {m->Button(onClick={processMetric=m}){Text(m.title,fontSize=12.sp)}}}
             val latest=state.current?.processes?.find{it.identity==selected!!.identity}
             SettingsHint(if(latest==null)"进程已退出或暂不可读取，保留历史曲线" else "CPU ${monitorPercent(latest.cpu)} · GPU ${monitorPercent(latest.gpu)}\n内存 ${monitorBytes(latest.memory)} · 专用显存 ${monitorBytes(latest.dedicated)}\n共享显存 ${monitorBytes(latest.shared)}")
+            SettingsHint("GPU与显存为此进程跨显卡统计；内存为工作集。")
             MonitorPlot(state.samples,processMetric,gpu?.id,selected!!.identity)
             SettingsAction("关闭") {selected=null}
         }}
@@ -152,22 +177,48 @@ private fun MonitorPlot(samples:List<ComputerSample>,metric:ComputerMetric,gpu:S
     val values=samples.map{computerValue(it,metric,gpu,process)}
     if(values.all{it==null}){SettingsHint("尚无可用${metric.title}采样，连接后开始记录曲线");return}
     val percent=metric==ComputerMetric.CPU||metric==ComputerMetric.GPU
-    val capacity=if(process==null) {if(metric==ComputerMetric.RAM)samples.lastOrNull()?.memoryTotal else samples.lastOrNull()?.gpus?.find{it.id==gpu}?.total} else null
-    val maximum=if(percent)100.0 else maxOf(1.0,capacity?:((values.filterNotNull().maxOrNull()?:1.0)*1.1))
+    val capacity=if(process==null) {if(metric==ComputerMetric.RAM)samples.lastOrNull()?.memoryTotal else computerGpu(samples.lastOrNull(),gpu)?.let{if(metric==ComputerMetric.SHARED)it.sharedTotal else it.total}} else null
+    val maximum=if(percent)100.0 else maxOf(1.0,capacity?.takeIf{it>0}?:((values.filterNotNull().maxOrNull()?:1.0)*1.1))
     val ink=MiuixTheme.colorScheme.primary;val grid=MiuixTheme.colorScheme.onBackground.copy(alpha=.12f)
-    Text("${metric.title} · ${if(percent)monitorPercent(values.lastOrNull()) else monitorBytes(values.lastOrNull())}",fontSize=14.sp)
+    Text("${if(process!=null && metric in listOf(ComputerMetric.GPU,ComputerMetric.VRAM,ComputerMetric.SHARED))"进程${metric.title}（跨显卡）" else metric.title} · ${if(percent)monitorPercent(values.lastOrNull()) else monitorBytes(values.lastOrNull())}",fontSize=14.sp)
     Text(if(percent)"0 — 100%" else "0 — ${monitorBytes(maximum)}",fontSize=11.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
+    val reveal=remember(metric,gpu,process) {androidx.compose.animation.core.Animatable(1f)}
+    LaunchedEffect(samples.lastOrNull()?.time,metric,gpu,process) {
+        if(samples.size>1) {
+            reveal.snapTo(0f)
+            reveal.animateTo(1f,androidx.compose.animation.core.tween(250,easing=androidx.compose.animation.core.LinearOutSlowInEasing))
+        }
+    }
     Canvas(Modifier.fillMaxWidth().height(110.dp).padding(vertical=8.dp)) {
         for(i in 0..4)drawLine(grid,Offset(0f,size.height*i/4),Offset(size.width,size.height*i/4),1.dp.toPx())
-        val path=Path();var open=false
-        val start=samples.firstOrNull()?.time?:0;val span=maxOf(5000L,(samples.lastOrNull()?.time?:0)-start)
-        values.forEachIndexed {index,value->
-            if(value==null){open=false;return@forEachIndexed}
-            val x=((samples[index].time-start).toDouble()/span*size.width).toFloat();val y=(size.height*(1-value.coerceIn(0.0,maximum)/maximum)).toFloat()
-            if(index>0&&samples[index].time-samples[index-1].time>15000)open=false
-            if(open)path.lineTo(x,y) else path.moveTo(x,y);open=true
-            if(index==values.lastIndex)drawCircle(ink,2.dp.toPx(),Offset(x,y))
+        for(i in 0..8)drawLine(grid,Offset(size.width*i/8,0f),Offset(size.width*i/8,size.height),.5.dp.toPx())
+        val path=Path();var area=Path();var open=false;var lastX=0f
+        val start=samples.firstOrNull()?.time?:0
+        val last=samples.lastOrNull()?.time?:start
+        val previous=samples.getOrNull(samples.lastIndex-1)?.time?:last
+        val continuous=last-previous in 1..15000
+        val progress=if(continuous)reveal.value else 1f
+        val end=previous+(last-previous)*progress.toDouble()
+        val span=maxOf(5000.0,end-start)
+        fun finishArea() {
+            if(open){area.lineTo(lastX,size.height);area.close();drawPath(area,ink.copy(alpha=.18f))}
+            area=Path();open=false
         }
+        values.forEachIndexed {index,raw->
+            if(raw==null){finishArea();return@forEachIndexed}
+            if(index>0&&samples[index].time-samples[index-1].time>15000)finishArea()
+            val newest=index==values.lastIndex
+            val prior=values.getOrNull(index-1)
+            val value=if(newest&&continuous&&prior!=null)prior+(raw-prior)*progress else raw
+            val time=if(newest&&continuous&&prior!=null)end else samples[index].time.toDouble()
+            val x=((time-start)/span*size.width).toFloat().coerceIn(0f,size.width)
+            val y=(size.height*(1-value.coerceIn(0.0,maximum)/maximum)).toFloat()
+            if(open){path.lineTo(x,y);area.lineTo(x,y)}
+            else {path.moveTo(x,y);area.moveTo(x,size.height);area.lineTo(x,y)}
+            open=true;lastX=x
+            if(newest)drawCircle(ink,2.dp.toPx(),Offset(x,y))
+        }
+        finishArea()
         drawPath(path,ink,style=Stroke(1.5.dp.toPx()))
     }
     if(samples.isNotEmpty())Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {

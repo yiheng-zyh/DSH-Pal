@@ -231,10 +231,12 @@ node verify-recovery-browser.mjs '<自己的验证产物目录>'
 
 新版网关支持 App 的「设置 → 电脑性能」。此功能沿用远程插件的已配对授权：只有 `/remote/api/session/list?pal_performance=1` 得到成功 RPC 授权后才读取监控快照。未授权请求保持原错误，不触发电脑采集。普通会话列表请求不变。
 
-采集端由 `performance.mjs`、`performance-sampler.ps1`、`performance-counters.cs` 和 `performance-hidden.vbs` 组成，必须随整个工具目录一起更新，不能只替换 gateway.mjs。使用 Windows 内置 PowerShell/.NET 与 PDH 批量读取 GPU 计数器，DXGI 读取显存容量；无需安装显卡命令行工具。隐藏启动器通过 wscript 运行，使用内存命名管道传数据，不创建可见终端或性能数据文件。
+采集端由 `performance.mjs`、`performance-sampler.ps1`、`performance-counters.cs` 、`performance-adapters.ps1` 和 `performance-hidden.vbs` 组成，必须随整个工具目录一起更新，不能只替换 gateway.mjs。使用 Windows 内置 PowerShell/.NET 与 PDH 批量读取 GPU 计数器，DXGI 读取显存容量；无需安装显卡命令行工具。隐藏启动器通过 wscript 运行，使用内存命名管道传数据，不创建可见终端或性能数据文件。
 
 总览提供 500/1000/2000 ms 档位，默认 1000 ms；进程快照约 3000 ms 更新。多个查看者复用一份采集器，按近期活跃查看者的最快档位运行。手机仅在约 3 秒一次的进程请求中接收完整列表，悬浮模式只取占用较高的少量进程；大响应启用低级别 gzip 压缩。实际刷新受网络与驱动影响。无查看者约 15 秒停止，采集停滞会回收并重试。
 
 测试：`node --test tools/remote-access/test-performance.mjs tools/remote-access/test-performance-windows.mjs tools/remote-access/test-gateway.mjs`。Windows 实机采集测试仅在 Windows 执行，自行创建/关闭临时采集器，不重启当前网关、DSH 或模型。其他平台跳过 Windows 实采测试，手机显示采集端不支持。
 
 更新已运行的电脑网关需要在合适时机重启该网关进程；隧道和手机连接会短暂重连。保留现有配置、凭据和配对，不需要卸载 App 或重新扫码。不要为了监控功能重启 DSH 主程序或终止任何模型进程。
+
+显卡兼容：使用DXGI枚举稳定LUID（专用容量含DedicatedVideoMemory与DedicatedSystemMemory），PDH按LUID匹配，独立保留同名及无活跃计数器的GPU。共享内存单列，不伪装成专用显存。`node --test tools/remote-access/test-performance-adapters.mjs` 在Windows验证集显/AMD/混合/同名适配器与计数器缺失的合成场景；不等同于AMD/Intel实体机验收。

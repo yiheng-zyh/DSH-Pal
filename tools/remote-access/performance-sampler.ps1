@@ -13,8 +13,7 @@ if($PipeName) {
  $reader=New-Object System.IO.StreamReader($pipe)
  $control=$reader.ReadLineAsync()
 }
-$logical=[Environment]::ProcessorCount
-$previous=@{}
+. (Join-Path $PSScriptRoot "performance-adapters.ps1")
 $adapters=@()
 try {
 Add-Type -TypeDefinition @"
@@ -41,7 +40,7 @@ public static class PalDxgi {
 }
 "@
 $adapters=@([PalDxgi]::Read() | ForEach-Object {
- @{key=('luid_0x{0:x8}_0x{1:x8}' -f ([uint32]([int64]$_.Id.High -band 0xffffffff)), $_.Id.Low);name=$_.Name;dedicatedTotal=$_.Dedicated.ToUInt64();sharedTotal=$_.Shared.ToUInt64()}
+ @{key=('luid_0x{0:x8}_0x{1:x8}' -f ([uint32]([int64]$_.Id.High -band 0xffffffff)), $_.Id.Low);name=$_.Name;dedicatedTotal=($_.Dedicated.ToUInt64()+$_.System.ToUInt64());sharedTotal=$_.Shared.ToUInt64()}
 })
 } catch {}
 Add-Type -Path (Join-Path $PSScriptRoot 'performance-counters.cs')
@@ -67,15 +66,7 @@ try {
    $processes=@($counters.ReadProcesses($fast));$processTime=$stamp;$lastProcesses=$elapsed.ElapsedMilliseconds
    $processMs=$processWatch.ElapsedMilliseconds
   }
-  $visible=@($adapters | Where-Object {($fast.dedicated -and $fast.dedicated.ContainsKey($_.key)) -or $fast.loads.ContainsKey($_.key)})
-  if(!$visible.Count){$visible=@($adapters | Group-Object name | ForEach-Object {$_.Group[0]})}
-  $gpus=@($visible | ForEach-Object {
-   $a=$_
-   @{id=$a.key;name=$a.name;load=$(if($fast.gpuAvailable -and $fast.loads.ContainsKey($a.key)){$fast.loads[$a.key]}else{$null});
-     dedicatedTotal=$a.dedicatedTotal;sharedTotal=$a.sharedTotal;
-     dedicatedUsed=$(if($fast.dedicated -and $fast.dedicated.ContainsKey($a.key)){$fast.dedicated[$a.key]}else{$null});
-     sharedUsed=$(if($fast.shared -and $fast.shared.ContainsKey($a.key)){$fast.shared[$a.key]}else{$null})}
-  })
+  $gpus=@(Get-PalGpuSnapshot -Adapters $adapters -Fast $fast)
   $result=@{time=$stamp;gpus=$gpus;processTime=$processTime;sampleMs=$watch.Elapsed.TotalMilliseconds;processMs=$processMs;intervalMs=$intervalMs;
     samplerCpuMs=[Diagnostics.Process]::GetCurrentProcess().TotalProcessorTime.TotalMilliseconds;
     gpuStatus=$(if($fast.gpuAvailable){'ok'}else{'driver-unavailable'})}
