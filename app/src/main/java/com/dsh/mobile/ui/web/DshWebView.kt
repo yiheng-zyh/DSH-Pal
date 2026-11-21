@@ -77,6 +77,9 @@ fun DshWebView(
             }
     }
     val resourceProbeScript = remember { com.dsh.mobile.core.PageProbeScript.resourceProbe() }
+    val selectionScript = remember {
+        WebPluginCompatibility.presentation(context.assets.open("mobile-selection.js").bufferedReader().use { it.readText() })
+    }
     val fileScript = remember {
         context.assets.open("web-files.js").bufferedReader().use { it.readText() }.replace("__DSH_FILE_AUTHORITY__", capabilities.exportAuthority) + "\n" +
             context.assets.open("session-files.js").bufferedReader().use { it.readText() } + "\n" +
@@ -87,7 +90,7 @@ fun DshWebView(
 
     val webView = remember {
         lateinit var instance: WebView
-        instance = WebView(context).apply {
+        instance = QuoteWebView(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -257,6 +260,7 @@ fun DshWebView(
                     BridgeScript.build(forwardEvents = true, forwardState = true),
                     WebPluginCompatibility.presentation(com.dsh.mobile.bridge.WebMotionScript.build() + "\n" + com.dsh.mobile.bridge.WebLayoutScript.build(context)),
                     fileScript,
+                    selectionScript,
                     WebPluginCompatibility.presentation(WebAppearance.script()),
                     probeSource,
                 ).joinToString("\n"),
@@ -310,6 +314,7 @@ fun DshWebView(
                 // polyfill 同样双保险，且排在最前：卓易通（issue #1）实测
                 // document-start 整条静默失效，只有这条路能赶在页面内联脚本前。
                 if (polyfillScript.isNotBlank()) injectJs(view, polyfillScript, "webview-polyfill")
+                injectJs(view, selectionScript, "mobile-selection")
                 // 双保险注入（与桥接同一理由：部分 HyperOS WebView 上
                 // addDocumentStartJavaScript 静默失效）。offline-guard 自身幂等。
                 injectJs(view, offlineGuardScript + ";window.__DSH_SET_OFFLINE__ && window.__DSH_SET_OFFLINE__(false)", "offline-guard")
@@ -337,6 +342,7 @@ fun DshWebView(
                 // 重试循环还会反复调 AbortSignal.any——此时补上，后续重试即可恢复。
                 if (polyfillScript.isNotBlank()) injectJs(view, polyfillScript, "webview-polyfill")
                 view.evaluateJavascript(fileScript, null)
+                view.evaluateJavascript(selectionScript, null)
                 view.evaluateJavascript(WebPluginCompatibility.presentation(WebAppearance.script()), null)
                 // Prove the JS half is actually present. If DshNative is missing the
                 // events can never arrive, so surface that instead of silently
