@@ -58,6 +58,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
     LaunchedEffect(current?.instance) {gpuId=current?.gpus?.firstOrNull{it.load!=null||it.used!=null||it.shared!=null}?.id ?: current?.gpus?.firstOrNull()?.id}
     val processes=remember(current?.processes,query,sort){current?.processes.orEmpty().filter {it.name.contains(query,true)||it.pid.toString()==query}.sortedByDescending {p->when(sort){ComputerMetric.CPU->p.cpu;ComputerMetric.GPU->p.gpu;ComputerMetric.RAM->p.memory;ComputerMetric.VRAM->p.dedicated;ComputerMetric.SHARED->p.shared} ?: -1.0}}
     var ringVertical by remember {mutableStateOf(settings.computerMonitorRingVertical)}
+    var backgroundTransparency by remember {mutableFloatStateOf(settings.computerMonitorBackgroundTransparency.toFloat())}
     var overlayStyle by remember {mutableStateOf(settings.computerMonitorStyle)}
     var overlay by remember(revision) {mutableStateOf(settings.computerMonitorOverlay)}
     var hint by remember {mutableStateOf<String?>(null)}
@@ -138,7 +139,17 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                     }
                                 }
                             }
-                            SettingsHint("圆环可横排或竖排，点圆环展开详情；长按图表切换显卡。")
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                                Text("背景透明度",fontSize=13.sp)
+                                Text("${backgroundTransparency.toInt()}%",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)
+                            }
+                            Slider(value=backgroundTransparency,onValueChange={value->
+                                backgroundTransparency=value
+                                settings.computerMonitorBackgroundTransparency=value.toInt()
+                                DshLiveService.current()?.refreshMonitor()
+                            },valueRange=0f..100f,modifier=Modifier.fillMaxWidth())
+                            SettingsHint("0% 为不透明，100% 为全透明；只改变背景，文字与图表保持清晰，选择会记住。")
+                            SettingsHint("圆环短点切横竖，＋/−收展；滑动标题或图表移动，原地长按图表切换显卡。")
                             Spacer(Modifier.height(12.dp))
                         }
                     }

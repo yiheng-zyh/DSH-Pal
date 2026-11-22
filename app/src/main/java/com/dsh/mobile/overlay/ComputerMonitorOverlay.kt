@@ -54,7 +54,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
             if(root==null)remove()
             return
         }
-        if(root!=null)return
+        if(root!=null){applyBackgroundTransparency();return}
         build()
         if(root==null)return
         token=ComputerPerformance.retain(context)
@@ -165,7 +165,12 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         if(rings){box.setOnClickListener{toggleRingOrientation()};detail?.setOnClickListener{toggleRingOrientation()}}
         box.visibility=if(ComputerPerformance.pageVisible.value)View.GONE else View.VISIBLE
         root=box
+        applyBackgroundTransparency()
         runCatching{wm.addView(box,p)}.onFailure{root=null;settings.computerMonitorOverlay=false}
+    }
+    private fun applyBackgroundTransparency(){
+        // Only the panel drawable fades; labels, graphs and touch targets stay intact.
+        root?.background?.alpha=((100-settings.computerMonitorBackgroundTransparency)*255f/100).roundToInt()
     }
     private fun render(state:ComputerPerformance.State) {
         val sample=state.current

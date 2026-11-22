@@ -48,6 +48,9 @@ class SettingsStore(context: Context) {
     var computerMonitorRingVertical: Boolean
         get() = prefs.getBoolean("computer_monitor_ring_vertical",false)
         set(value) {prefs.edit {putBoolean("computer_monitor_ring_vertical",value)}}
+    var computerMonitorBackgroundTransparency: Int
+        get() = prefs.getInt("computer_monitor_background_transparency",0).coerceIn(0,100)
+        set(value) {prefs.edit {putInt("computer_monitor_background_transparency",value.coerceIn(0,100))}}
     var computerMonitorX: Float
         get() = prefs.getFloat("computer_monitor_x",.05f).coerceIn(0f,1f)
         set(value) {prefs.edit {putFloat("computer_monitor_x",value.coerceIn(0f,1f))}}
