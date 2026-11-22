@@ -57,6 +57,12 @@ class SettingsStore(context: Context) {
     var computerMonitorBackgroundTransparency: Int
         get() = prefs.getInt("computer_monitor_background_transparency",0).coerceIn(0,100)
         set(value) {prefs.edit {putInt("computer_monitor_background_transparency",value.coerceIn(0,100))}}
+    var computerMonitorAnchorX: Float
+        get() = prefs.getFloat("computer_monitor_anchor_x",-1f)
+        set(value) {prefs.edit {putFloat("computer_monitor_anchor_x",value.coerceIn(0f,1f))}}
+    var computerMonitorAnchorY: Float
+        get() = prefs.getFloat("computer_monitor_anchor_y",-1f)
+        set(value) {prefs.edit {putFloat("computer_monitor_anchor_y",value.coerceIn(0f,1f))}}
     var computerMonitorX: Float
         get() = prefs.getFloat("computer_monitor_x",.05f).coerceIn(0f,1f)
         set(value) {prefs.edit {putFloat("computer_monitor_x",value.coerceIn(0f,1f))}}

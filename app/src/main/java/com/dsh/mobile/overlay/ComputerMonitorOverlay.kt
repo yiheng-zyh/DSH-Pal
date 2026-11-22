@@ -23,6 +23,8 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     private var detail:TextView?=null
     private var graph:Graph?=null
     private var params:WindowManager.LayoutParams?=null
+    private var anchorX=settings.computerMonitorAnchorX
+    private var anchorY=settings.computerMonitorAnchorY
     private var token:Any?=null
     private var updates:Job?=null
     private var renderedItems=emptySet<String>()
@@ -83,7 +85,16 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
             x=(settings.computerMonitorX*b.width()).roundToInt();y=(settings.computerMonitorY*b.height()).roundToInt()
         }.also{params=it}
         p.width=minOf(dp(if(expanded)expandedWidth else compactWidth),b.width()-dp(20));p.height=windowHeight
-        p.x=p.x.coerceIn(0,maxOf(0,b.width()-p.width));p.y=p.y.coerceIn(dp(24),maxOf(dp(24),b.height()-p.height-dp(24)))
+        val maxX=maxOf(0,b.width()-p.width);val minY=dp(24);val maxY=maxOf(minY,b.height()-p.height-dp(24))
+        if(anchorX<0)anchorX=OverlayPlacement.anchor(p.x,0,maxX)
+        if(anchorY<0)anchorY=OverlayPlacement.anchor(p.y,minY,maxY)
+        p.x=OverlayPlacement.coordinate(anchorX,0,maxX);p.y=OverlayPlacement.coordinate(anchorY,minY,maxY)
+        settings.computerMonitorAnchorX=anchorX;settings.computerMonitorAnchorY=anchorY
+        fun saveDraggedPosition(){
+            anchorX=OverlayPlacement.anchor(p.x,0,maxX);anchorY=OverlayPlacement.anchor(p.y,minY,maxY)
+            settings.computerMonitorAnchorX=anchorX;settings.computerMonitorAnchorY=anchorY
+            settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()
+        }
         val box=LinearLayout(context).apply {orientation=LinearLayout.VERTICAL;background=GradientDrawable().apply{setColor(Color.rgb(30,34,43));cornerRadius=dp(20).toFloat();setStroke(dp(1),Color.rgb(74,82,96))};elevation=dp(8).toFloat();setPadding(dp(4),dp(4),dp(4),dp(4))}
         val header=LinearLayout(context)
         heading=label(if(vertical&&!expanded)14f else 12f).apply {if(vertical&&!expanded){setPadding(0,0,0,0);gravity=Gravity.CENTER};isSingleLine=true;ellipsize=android.text.TextUtils.TruncateAt.END;contentDescription=if(rings)"拖动性能悬浮窗，点按切换横竖排列" else "拖动性能悬浮窗，点按展开或收起"}
@@ -125,13 +136,13 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
                     cancelHold()
                     if(active){
                         active=false
-                        if(moved){settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()}
+                        if(moved)saveDraggedPosition()
                         else if(!held)view.performClick()
                     }
                 }
                 MotionEvent.ACTION_CANCEL,MotionEvent.ACTION_POINTER_DOWN->{
                     cancelHold();active=false
-                    if(moved){settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()}
+                    if(moved)saveDraggedPosition()
                 }
             }
             true
