@@ -75,6 +75,21 @@ data class ResourceFacts(
     val failures: List<ResourceFailure> = emptyList(),
 )
 
+/**
+ * What the WebView compatibility layer actually installed (issue #2).
+ *
+ * Version is the only proof the layer *ran*; [apis] is deliberately the list of
+ * APIs it had to add, not a static manifest. On a modern kernel this is empty,
+ * which is itself the finding: the layer ran and had nothing to do. A static
+ * list would read the same on every device and could not tell a reader whether
+ * the run-time environment was ever short of anything.
+ */
+data class PolyfillFacts(
+    /** 0 = no foothold recorded at all (injection never ran). */
+    val version: Int = 0,
+    val apis: List<String> = emptyList(),
+)
+
 /** A page script error, deduplicated. */
 data class JsErrorFacts(
     /** Script file name (path trimmed to its last segment). */
@@ -115,6 +130,7 @@ data class DiagSnapshot(
     val injectFailed: List<String> = emptyList(),
     val mixedContent: List<String> = emptyList(),
     val net: NetEnv = NetEnv(),
+    val polyfills: PolyfillFacts = PolyfillFacts(),
 )
 
 /**
@@ -144,6 +160,7 @@ object DiagFacts {
     private val injectFailed = mutableListOf<String>()
     private val mixedContent = mutableListOf<String>()
     private var net: NetEnv = NetEnv()
+    private var polyfills: PolyfillFacts = PolyfillFacts()
 
     /** Forget everything: a new navigation starts from silence, not from stale facts. */
     fun reset() {
@@ -160,6 +177,7 @@ object DiagFacts {
             injectFailed.clear()
             mixedContent.clear()
             net = NetEnv()
+            polyfills = PolyfillFacts()
         }
     }
 
@@ -264,6 +282,13 @@ object DiagFacts {
         synchronized(lock) { net = value }
     }
 
+    // ---- webview compatibility layer ----
+
+    /** Record what `webview-polyfill.js` installed (issue #2). */
+    fun recordPolyfills(value: PolyfillFacts) {
+        synchronized(lock) { polyfills = value }
+    }
+
     /** Immutable bundle for the summary renderer. */
     fun snapshot(): DiagSnapshot = synchronized(lock) {
         DiagSnapshot(
@@ -279,6 +304,7 @@ object DiagFacts {
             injectFailed = injectFailed.toList(),
             mixedContent = mixedContent.toList(),
             net = net,
+            polyfills = polyfills,
         )
     }
 }

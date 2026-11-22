@@ -232,6 +232,18 @@ object PageProbeScript {
      */
     fun injectCheck(): String = """
 (function () {
+  function polyfillFacts() {
+    try {
+      var facts = window.__DSH_POLYFILLS__;
+      if (!facts) return { version: 0, apis: [] };
+      var apis = [];
+      var list = facts.apis;
+      if (list && typeof list.length === 'number') {
+        for (var k = 0; k < list.length && k < 12; k++) apis.push(String(list[k]).slice(0, 40));
+      }
+      return { version: facts.version | 0, apis: apis };
+    } catch (_) { return { version: 0, apis: [] }; }
+  }
   var names = ['DshNative', '__DSH_MOBILE_BRIDGE__', '__DSH_VIEWPORT__', '__DSH_JS_ERRORS__', '__DSH_RES_PROBE__', '__DSH_OFFLINE_GUARD__', '__DSH_POLYFILLS__'];
   try { if (DshFiles.originalDshPage()) names = names.filter(function (name) { return name !== '__DSH_VIEWPORT__'; }); } catch (_) {}
   var missing = [];
@@ -246,7 +258,7 @@ object PageProbeScript {
       }
     } catch (_) {}
   }
-  return { missing: missing };
+  return { missing: missing, polyfills: polyfillFacts() };
 })()
     """.trimIndent()
 

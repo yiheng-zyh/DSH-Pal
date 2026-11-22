@@ -359,7 +359,27 @@ fun DshWebView(
                 injectJs(view, com.dsh.mobile.core.PageProbeScript.injectCheck(), "inject-check") { result ->
                     // injectJs guards this callback body, so a non-JSON reply
                     // (or a null one) is simply recorded as "no finding".
-                    val missing = org.json.JSONObject(result.orEmpty()).optJSONArray("missing") ?: return@injectJs
+                    val parsed = runCatching { org.json.JSONObject(result.orEmpty()) }.getOrNull() ?: return@injectJs
+                    // What the compatibility layer actually installed (issue #2). A
+                    // modern kernel reports version>0 with an empty api list, which is
+                    // the evidence that the layer ran and was not merely registered.
+                    runCatching {
+                        val facts = parsed.optJSONObject("polyfills")
+                        if (facts != null) {
+                            val apis = mutableListOf<String>()
+                            val array = facts.optJSONArray("apis")
+                            if (array != null) for (index in 0 until array.length()) {
+                                array.optString(index).takeIf { it.isNotBlank() }?.let { apis += it }
+                            }
+                            com.dsh.mobile.core.DiagFacts.recordPolyfills(
+                                com.dsh.mobile.core.PolyfillFacts(
+                                    version = facts.optInt("version", 0),
+                                    apis = apis,
+                                ),
+                            )
+                        }
+                    }
+                    val missing = parsed.optJSONArray("missing") ?: return@injectJs
                     for (index in 0 until missing.length()) {
                         val name = missing.optString(index)
                         if (name.isBlank()) continue

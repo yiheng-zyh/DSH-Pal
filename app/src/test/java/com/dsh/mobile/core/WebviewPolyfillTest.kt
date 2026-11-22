@@ -27,6 +27,28 @@ class WebviewPolyfillTest {
         assertTrue(script.contains("typeof AbortSignal.any !== 'function'"))
     }
 
+    /**
+     * issue #2：鸿蒙 WebView 114 上真正炸渲染的是 URL.canParse（Chromium 120+），
+     * 0.1.4 的清单里只有前两项，所以补了兼容层页面照样挂不起来。
+     */
+    @Test fun coversUrlCanParseAndCompanions() {
+        assertTrue("URL.canParse", script.contains("URL.canParse"))
+        assertTrue("missing-only guard", script.contains("typeof URL.canParse !== 'function'"))
+        assertTrue("URL.parse", script.contains("URL.parse"))
+        assertTrue("Object.groupBy", script.contains("Object.groupBy"))
+        assertTrue("Map.groupBy", script.contains("Map.groupBy"))
+        // 分组键可能是 '__proto__'：必须走 defineProperty，普通赋值会污染原型。
+        assertTrue(script.contains("Object.defineProperty(out, key"))
+    }
+
+    @Test fun reportsWhichApisWereActuallyInstalled() {
+        // 只记"真的补过的"：静态清单在新内核上也会列满，等于没有信息量。
+        assertTrue(script.contains("var applied = []"))
+        assertTrue(script.contains("window.__DSH_POLYFILLS__ = { version: 2, apis: applied }"))
+        // foothold 必须先占位，中途抛错也不会整个消失。
+        assertTrue(script.contains("window.__DSH_POLYFILLS__ = { version: 1, apis: [] }"))
+    }
+
     @Test fun staysInsideOldChromiumSyntaxSubset() {
         // WebView 126 子集（PageProbeScript 同款约定）：polyfill 自己绝不能在
         // 旧内核上二次语法报错。去掉注释后检查禁用语法。

@@ -147,6 +147,83 @@ class DiagSummaryTest {
         assertTrue(script, script.contains("另有 2 类"))
     }
 
+    // ---- issue #2: the script error must outrank the watchdog token ----
+
+    /**
+     * The exact shape from issue #2: a 90-second watchdog pins the stage to
+     * `timeout-90s` while the real cause is a `TypeError` already recorded from
+     * `E/Console`. The old renderer headlined the timeout and listed "check the
+     * desktop is listening" as advice #1, sending the reader to the wrong machine.
+     */
+    private val watchdogVsTypeError = DiagSnapshot(
+        stageDescription = "FAILED · last=app-mount · reason=timeout-90s",
+        failureReason = "timeout-90s",
+        page = PageSnapshot(readyState = "interactive", rootChildren = 1),
+        resources = ResourceFacts(total = 15, ok = 14, fail = 1, slow = 5, cached = 4),
+        jsErrors = listOf(JsErrorFacts("index-a1b2.js", 59, 0, "TypeError: URL.canParse is not a function")),
+        net = NetEnv(transport = "vpn", validated = true, webviewVersion = "114.0.6.303", webviewOld = true),
+    )
+
+    @Test fun stageNamesScriptErrorAheadOfWatchdogTimeout() {
+        val stage = lineOf(render(watchdogVsTypeError), "阶段")
+        // The watchdog reason is kept as evidence, not deleted: it is still true
+        // that navigation never completed. What changes is that the script error
+        // is named first, because it is the earlier and more specific cause.
+        assertTrue(stage, stage.contains("timeout-90s"))
+        assertTrue(stage, stage.contains("脚本先失败"))
+        assertTrue(stage, stage.contains("URL.canParse"))
+    }
+
+    @Test fun watchdogTokenDoesNotSendReaderToTheDesktop() {
+        val advice = adviceOf(render(watchdogVsTypeError))
+        // A page that produced a TypeError was reached; `timeout-90s` is the
+        // symptom of its crash, not evidence the desktop stopped listening.
+        assertFalse(advice, advice.contains("确认电脑端服务在监听"))
+        assertTrue(advice, advice.contains("页面脚本执行失败"))
+        assertEquals("the script error must be advice #1", 0, advice.indexOf("1) 页面脚本执行失败"))
+    }
+
+    @Test fun transportAdviceStillFiresWithoutScriptErrors() {
+        // Guard against over-suppressing: a genuine transport timeout with no
+        // recorded script error keeps the original advice.
+        val advice = adviceOf(
+            render(
+                DiagSnapshot(
+                    stageDescription = "FAILED · last=headers · reason=timeout-90s",
+                    failureReason = "timeout-90s",
+                    page = PageSnapshot(readyState = "loading", rootChildren = 0),
+                )
+            )
+        )
+        assertTrue(advice, advice.contains("确认电脑端服务在监听"))
+    }
+
+    @Test fun compatibilityLayerReportsWhatItInstalled() {
+        val text = render(
+            watchdogVsTypeError.copy(
+                polyfills = PolyfillFacts(version = 2, apis = listOf("URL.canParse", "URL.parse")),
+            ),
+        )
+        val script = lineOf(text, "脚本")
+        assertTrue(script, script.contains("兼容层 v2"))
+        assertTrue(script, script.contains("URL.canParse"))
+    }
+
+    @Test fun modernKernelLayerSaysItHadNothingToDo() {
+        // version>0 with an empty api list is the evidence "the layer ran and this
+        // kernel was not short" — the opposite conclusion from "无记录".
+        val script = lineOf(render(DiagSnapshot(polyfills = PolyfillFacts(version = 2))), "脚本")
+        assertTrue(script, script.contains("兼容层 v2 无需补丁"))
+        assertFalse(script, script.contains("无记录"))
+    }
+
+    @Test fun absentFootholdIsNotReportedAsHealthy() {
+        // version 0 = the injection never ran on this WebView build; the row must
+        // stay silent about the layer rather than claim it had nothing to do.
+        val script = lineOf(render(DiagSnapshot(stageDescription = "READY · last=ready")), "脚本")
+        assertFalse(script, script.contains("兼容层"))
+    }
+
     // ---- honesty of the derived rows ----
 
     @Test fun unmeasuredHopsStayUnknownInsteadOfBeingGuessed() {

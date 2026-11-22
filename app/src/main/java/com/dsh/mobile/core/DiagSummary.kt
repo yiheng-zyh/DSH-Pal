@@ -101,13 +101,27 @@ object DiagSummary {
         // NavStageMachine.describe() already renders `· reason=…`; appending it a
         // second time produced `reason=dns · 原因=dns` on the first live sample.
         val alreadyNamesReason = reason != null && description.contains("reason=$reason")
-        return when {
+        val text = when {
             reason != null && description.isNotBlank() && alreadyNamesReason -> description
             reason != null && description.isNotBlank() -> "$description · 原因=$reason"
             reason != null -> "失败原因=$reason"
             description.isNotBlank() -> description
             else -> UNKNOWN
         }
+        // issue #2: a cosmetic watchdog reason (`timeout-90s`) was the headline while
+        // an E/Console TypeError sat unread in the buffer, so the first suggestion
+        // sent the reader to "check the desktop is listening" — the wrong machine.
+        // The stage machinery only knows navigation milestones; a script error is
+        // the earlier and more specific cause whenever both are present.
+        if (snapshot.jsErrors.isEmpty() || isScriptReason(reason)) return text
+        val probe = snapshot.jsErrors.first()
+        return text + " · 脚本先失败(${probe.source}:${probe.line} ${probe.message.take(60)})"
+    }
+
+    /** True when the recorded reason already names the script layer. */
+    private fun isScriptReason(reason: String?): Boolean {
+        val token = reason?.lowercase() ?: return false
+        return token.contains("script") || token.contains("console-error") || token.contains("js-")
     }
 
     /**
@@ -185,11 +199,28 @@ object DiagSummary {
     }
 
     private fun scriptText(snapshot: DiagSnapshot): String {
-        if (snapshot.jsErrors.isEmpty()) return if (snapshot.injectFailed.isEmpty()) "无记录" else "注入脚本: " + snapshot.injectFailed.take(3).joinToString(", ")
-        return snapshot.jsErrors.take(3).joinToString(" | ") { error ->
-            val count = if (error.count > 1) "(共 ${error.count} 次)" else ""
-            "${error.source}:${error.line} ${error.message.take(80)}$count"
-        } + if (snapshot.jsErrors.size > 3) " | 另有 ${snapshot.jsErrors.size - 3} 类" else ""
+        val parts = mutableListOf<String>()
+        if (snapshot.jsErrors.isNotEmpty()) {
+            parts += snapshot.jsErrors.take(3).joinToString(" | ") { error ->
+                val count = if (error.count > 1) "(共 ${error.count} 次)" else ""
+                "${error.source}:${error.line} ${error.message.take(80)}$count"
+            }
+            if (snapshot.jsErrors.size > 3) parts += "另有 ${snapshot.jsErrors.size - 3} 类"
+        }
+        // issue #2: how many APIs the compatibility layer had to add is the single
+        // most useful number when a modern-API TypeError is in play — it says
+        // whether the layer ran (version > 0) and whether this kernel was short.
+        val poly = snapshot.polyfills
+        if (poly.version > 0) {
+            parts += if (poly.apis.isEmpty()) "兼容层 v${poly.version} 无需补丁"
+            else "兼容层 v${poly.version} 补 ${poly.apis.size} 项(${poly.apis.take(4).joinToString(", ")})"
+        }
+        if (snapshot.injectFailed.isNotEmpty()) {
+            parts += "注入脚本: " + snapshot.injectFailed.take(3).joinToString(", ")
+        }
+        // "无记录" must stay distinguishable from "layer ran and found nothing",
+        // which is why the polyfill line prints on its own rather than as a default.
+        return if (parts.isEmpty()) "无记录" else parts.joinToString(" · ")
     }
 
     private fun cacheText(snapshot: DiagSnapshot): String {
@@ -239,6 +270,15 @@ object DiagSummary {
         val reason = snapshot.failureReason?.lowercase().orEmpty()
         val candidates = mutableListOf<String>()
 
+        // 0. A page script error outranks the transport tokens below (issue #2): the
+        //    watchdog's `timeout-90s` is a symptom of the crash, not its cause, so
+        //    listing "check the desktop is listening" first sent a reader to the
+        //    wrong machine while the actual TypeError sat in the same export.
+        if (snapshot.jsErrors.isNotEmpty()) {
+            val first = snapshot.jsErrors.first()
+            candidates += "页面脚本执行失败，先清除网页资源缓存；仍失败请带此错误向电脑端反馈（证据：${first.source}:${first.line} ${first.message.take(60)}）"
+        }
+
         // 1. transport-level failure tokens: check the network first, in order of specificity.
         if (reason.contains("dns")) {
             val dns = snapshot.net.privateDns
@@ -249,7 +289,12 @@ object DiagSummary {
             candidates += "检查电脑端证书的有效期与域名匹配后重试（证据：failureReason=$reason" +
                 (if (snapshot.segments.tlsMs >= 0) "; tls=${snapshot.segments.tlsMs}ms" else "") + "）"
         }
-        if (reason.contains("tcp-refused") || reason.contains("tcp-timeout") || reason.contains("refused") || reason.contains("timeout")) {
+        if ((reason.contains("tcp-refused") || reason.contains("tcp-timeout") || reason.contains("refused") || reason.contains("timeout")) &&
+            snapshot.jsErrors.isEmpty()
+        ) {
+            // Suppressed when a script error proves the page itself was reached: a
+            // `timeout-90s` watchdog firing on a mounting crash is not evidence that
+            // the desktop is down.
             candidates += "确认电脑端服务在监听、端口未被系统防火墙放行外访问后重试（证据：failureReason=$reason）"
         }
         // 4xx is NOT a broken desktop: 401/403 from the relay probe is a *successful*
