@@ -74,7 +74,7 @@ export function createPerformanceMonitor({platform=process.platform,startWorker,
    intervalMs=[500,1000,2000].includes(intervalMs)?intervalMs:1000;rates.set(intervalMs,now());
    for(const [rate,time] of rates)if(now()-time>15000)rates.delete(rate);
 if(platform!=='win32')return {schema:1,status:'unsupported',message:'电脑性能采集目前支持 Windows 10/11'};
-   start();worker?.setIntervalMs?.(Math.min(...rates.keys()));return latest?{...latest,status:now()-latest.receivedAt>12000?'stale':'ok',...(includeHistory?{history:[...history]}:{}),processes:includeProcesses==='top'?latest.processes.slice().sort((a,b)=>(b.cpu??-1)-(a.cpu??-1)).slice(0,5):includeProcesses?latest.processes:undefined}:{schema:1,status:'warming',message:'正在读取电脑性能计数器，请稍候'};},
+   start();worker?.setIntervalMs?.(Math.min(...rates.keys()));return latest?{...latest,status:now()-latest.receivedAt>12000?'stale':'ok',...(includeHistory?{history:[...history]}:{}),processes:includeProcesses==='top'?[...new Map(['cpu','gpu'].flatMap(key=>latest.processes.slice().sort((a,b)=>(b[key]??-1)-(a[key]??-1)).slice(0,5)).map(p=>[p.identity,p])).values()]:includeProcesses?latest.processes:undefined}:{schema:1,status:'warming',message:'正在读取电脑性能计数器，请稍候'};},
   close:stop,
  };
 }

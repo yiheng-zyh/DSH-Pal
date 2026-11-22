@@ -4,6 +4,13 @@ import org.junit.Test
 import org.json.JSONObject
 class ComputerPerformanceTest {
  private fun sample(cpu:String="12",load:String="null",identity:String="42:1")=ComputerSample.parse(JSONObject("""{"schema":1,"time":1000,"instance":"one","cpu":$cpu,"memoryUsed":100,"memoryTotal":1000,"gpus":[{"id":"a","name":"GPU","load":$load,"dedicatedUsed":400,"dedicatedTotal":800}],"processes":[{"identity":"$identity","pid":42,"name":"model","cpu":null,"gpu":$load,"memory":80,"dedicated":300}]}"""))
+ @Test fun diskActiveTimeAndThroughputAreOptionalAndValidated(){
+  assertNull(sample().diskActive)
+  val j=JSONObject("""{"schema":1,"time":1000,"diskActive":75,"diskRead":2048,"diskWrite":4096}""")
+  val s=ComputerSample.parse(j);assertEquals(75.0,s.diskActive!!,.01);assertEquals(2048.0,s.diskRead!!,.01)
+  assertNull(ComputerSample.parse(j.put("diskActive",101).put("diskRead",-1)).diskActive)
+  assertNull(ComputerSample.parse(j).diskRead)
+ }
  @Test fun unavailableMetricsStayUnknown(){val s=sample();assertNull(s.gpus[0].load);assertNull(s.processes[0].cpu);assertEquals(400.0,computerValue(s,ComputerMetric.VRAM,"a")!!,0.01)}
  @Test fun missingAdapterDoesNotBorrowAnotherGpu(){assertNull(computerValue(sample(),ComputerMetric.VRAM,"missing"))}
  @Test fun processMetricsUseIdentityRatherThanRecycledPid(){val s=sample();assertNull(computerValue(s,ComputerMetric.VRAM,"a","42:2"));assertEquals(300.0,computerValue(s,ComputerMetric.VRAM,"a","42:1")!!,0.01)}

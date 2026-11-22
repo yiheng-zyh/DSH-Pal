@@ -35,3 +35,12 @@ test('fast summary frames retain the independent slow process snapshot',async()=
  assert.equal(monitor.snapshot({intervalMs:500,includeProcesses:false}).processes,undefined);
  assert.ok(rates.every(value=>[500,1000,2000].includes(value)));monitor.close();
 });
+
+test('overlay top snapshots include GPU leaders outside the CPU top five',async()=>{
+ const worker=new EventEmitter();worker.stdout=new PassThrough();worker.kill=()=>{};
+ const monitor=createPerformanceMonitor({platform:'win32',startWorker:()=>worker});monitor.snapshot();
+ const processes=Array.from({length:10},(_,i)=>({identity:String(i),cpu:100-i,gpu:i*10}));
+ worker.stdout.write(JSON.stringify({time:1000,gpus:[],diskActive:73,diskRead:1024,processes})+'\n');
+ await new Promise(r=>setImmediate(r));const result=monitor.snapshot({includeProcesses:'top'});
+ assert.ok(result.processes.some(p=>p.identity==='9'));assert.equal(result.diskActive,73);monitor.close();
+});

@@ -67,7 +67,7 @@ try {
    $processMs=$processWatch.ElapsedMilliseconds
   }
   $gpus=@(Get-PalGpuSnapshot -Adapters $adapters -Fast $fast)
-  $result=@{time=$stamp;gpus=$gpus;processTime=$processTime;sampleMs=$watch.Elapsed.TotalMilliseconds;processMs=$processMs;intervalMs=$intervalMs;
+  $result=@{diskActive=$fast.diskActive;diskRead=$fast.diskRead;diskWrite=$fast.diskWrite;time=$stamp;gpus=$gpus;processTime=$processTime;sampleMs=$watch.Elapsed.TotalMilliseconds;processMs=$processMs;intervalMs=$intervalMs;
     samplerCpuMs=[Diagnostics.Process]::GetCurrentProcess().TotalProcessorTime.TotalMilliseconds;
     gpuStatus=$(if($fast.gpuAvailable){'ok'}else{'driver-unavailable'})}
   if($includeProcesses){$result.processes=$processes;$result.processCount=$processes.Count}

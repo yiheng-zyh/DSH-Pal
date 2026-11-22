@@ -14,5 +14,7 @@ test('Windows hidden sampler keeps 0.5-second totals flowing with an idle contro
   assert.ok(values.slice(-6).every(value=>value.intervalMs===500));
   assert.ok(new Set(values.map(value=>value.processTime)).size>=2,'slow process snapshots did not advance');
   assert.ok(values.every(value=>Number.isFinite(value.cpu)&&value.memoryTotal>0));
+  assert.ok(values.some(v=>Number.isFinite(v.diskActive)&&v.diskActive>=0&&v.diskActive<=100),"physical disk active time unavailable");
+  assert.ok(values.some(v=>Number.isFinite(v.diskRead)&&Number.isFinite(v.diskWrite)),"disk throughput unavailable");
  } finally {monitor.close();}
 });

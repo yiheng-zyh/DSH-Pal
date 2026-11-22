@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 data class ComputerProcess(val identity:String,val pid:Int,val name:String,val cpu:Double?,val gpu:Double?,val memory:Double?,val dedicated:Double?,val shared:Double?)
 data class ComputerGpu(val id:String,val name:String,val load:Double?,val used:Double?,val total:Double?,val shared:Double?,val sharedTotal:Double?)
-data class ComputerSample(val time:Long,val cpu:Double?,val memory:Double?,val memoryTotal:Double?,val gpus:List<ComputerGpu>,val processes:List<ComputerProcess>,val instance:String) {
+data class ComputerSample(val time:Long,val cpu:Double?,val memory:Double?,val memoryTotal:Double?,val gpus:List<ComputerGpu>,val processes:List<ComputerProcess>,val instance:String,val diskActive:Double?=null,val diskRead:Double?=null,val diskWrite:Double?=null) {
     companion object {
         fun parse(json:JSONObject):ComputerSample {
             require(json.optInt("schema")==1 && json.optLong("time")>0)
@@ -25,7 +25,7 @@ data class ComputerSample(val time:Long,val cpu:Double?,val memory:Double?,val m
             fun percent(j:JSONObject,key:String)=number(j,key)?.takeIf{it<=100}
             return ComputerSample(json.getLong("time"),percent(json,"cpu"),number(json,"memoryUsed"),number(json,"memoryTotal"),
                 (0 until minOf(gpus?.length()?:0,32)).map {gpus!!.getJSONObject(it)}.map {g->ComputerGpu(g.optString("id"),g.optString("name").take(160),percent(g,"load"),number(g,"dedicatedUsed"),number(g,"dedicatedTotal"),number(g,"sharedUsed"),number(g,"sharedTotal"))},
-                (0 until minOf(processes?.length()?:0,1024)).map {processes!!.getJSONObject(it)}.map {p->ComputerProcess(p.optString("identity").take(100),p.optInt("pid"),p.optString("name").take(160),percent(p,"cpu"),percent(p,"gpu"),number(p,"memory"),number(p,"dedicated"),number(p,"shared"))},json.optString("instance"))
+                (0 until minOf(processes?.length()?:0,1024)).map {processes!!.getJSONObject(it)}.map {p->ComputerProcess(p.optString("identity").take(100),p.optInt("pid"),p.optString("name").take(160),percent(p,"cpu"),percent(p,"gpu"),number(p,"memory"),number(p,"dedicated"),number(p,"shared"))},json.optString("instance"),percent(json,"diskActive"),number(json,"diskRead"),number(json,"diskWrite"))
         }
     }
 }

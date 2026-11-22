@@ -58,6 +58,8 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
     LaunchedEffect(current?.instance) {gpuId=current?.gpus?.firstOrNull{it.load!=null||it.used!=null||it.shared!=null}?.id ?: current?.gpus?.firstOrNull()?.id}
     val processes=remember(current?.processes,query,sort){current?.processes.orEmpty().filter {it.name.contains(query,true)||it.pid.toString()==query}.sortedByDescending {p->when(sort){ComputerMetric.CPU->p.cpu;ComputerMetric.GPU->p.gpu;ComputerMetric.RAM->p.memory;ComputerMetric.VRAM->p.dedicated;ComputerMetric.SHARED->p.shared} ?: -1.0}}
     var ringVertical by remember {mutableStateOf(settings.computerMonitorRingVertical)}
+    var overlayItems by remember {mutableStateOf(settings.computerMonitorItems)}
+    var gpuTop by remember {mutableStateOf(settings.computerMonitorGpuTop)}
     var backgroundTransparency by remember {mutableFloatStateOf(settings.computerMonitorBackgroundTransparency.toFloat())}
     var overlayStyle by remember {mutableStateOf(settings.computerMonitorStyle)}
     var overlay by remember(revision) {mutableStateOf(settings.computerMonitorOverlay)}
@@ -99,6 +101,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                         Text((if(metric==ComputerMetric.SHARED)"● " else "")+"查看共享 GPU 内存曲线 ›",modifier=Modifier.padding(vertical=10.dp).clickable{metric=ComputerMetric.SHARED},fontSize=12.sp,color=MiuixTheme.colorScheme.primary)
                         if(gpu.total==0.0)SettingsHint("系统未报告专用显存容量，可查看共享 GPU 内存。")
                     }
+                    SettingsHint("磁盘活动 ${monitorPercent(current?.diskActive)} · 最忙物理磁盘\n读 ${monitorBytes(current?.diskRead)}/s · 写 ${monitorBytes(current?.diskWrite)}/s · 物理磁盘合计")
                     MonitorPlot(state.samples,metric,gpuId?:gpu?.id)
                     SettingsHint("${metric.title}历史 · 中断留空 · 点上方指标切换曲线")
                 }
@@ -139,6 +142,17 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                     }
                                 }
                             }
+                            Text("展示项目",fontSize=13.sp)
+                            listOf("CPU" to "CPU","GPU" to "GPU","RAM" to "内存","VRAM" to "专用显存","SHARED" to "共享显存","DISK" to "磁盘活动与读写","PROCESSES" to "进程前三项").forEach {(key,title)->
+                                ToggleRow(title,"",key in overlayItems){on->
+                                    val next=if(on)overlayItems+key else overlayItems-key
+                                    if(next.isNotEmpty()){overlayItems=next;settings.computerMonitorItems=next;DshLiveService.current()?.refreshMonitor()}
+                                }
+                            }
+                            if("PROCESSES" in overlayItems)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                listOf(false to "CPU 前三",true to "GPU 前三").forEach {(value,title)->Button(onClick={gpuTop=value;settings.computerMonitorGpuTop=value;DshLiveService.current()?.refreshMonitor()},modifier=Modifier.weight(1f)){Text((if(gpuTop==value)"● " else "")+title,fontSize=12.sp)}}
+                            }
+                            SettingsHint("至少保留一项。磁盘活动为最忙物理磁盘，读写为物理磁盘合计；GPU 进程为跨显卡统计。")
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
                                 Text("背景透明度",fontSize=13.sp)
                                 Text("${backgroundTransparency.toInt()}%",fontSize=12.sp,color=MiuixTheme.colorScheme.onBackgroundVariant)

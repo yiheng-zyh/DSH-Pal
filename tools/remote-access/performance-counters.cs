@@ -16,7 +16,7 @@ public sealed class PalPerformanceCounters : IDisposable {
  static readonly Regex Luid=new Regex(@"luid_0x[0-9a-f]+_0x[0-9a-f]+",RegexOptions.Compiled|RegexOptions.IgnoreCase);
  static readonly Regex Pid=new Regex(@"^pid_(\d+)_",RegexOptions.Compiled|RegexOptions.IgnoreCase);
  static readonly Regex Engine=new Regex(@"^(pid_\d+)_(luid_0x[0-9a-f]+_0x[0-9a-f]+_phys_\d+_eng_\d+)_",RegexOptions.Compiled|RegexOptions.IgnoreCase);
- IntPtr fast,slow,engines,adapterDedicated,adapterShared,processDedicated,processShared;
+ IntPtr fast,slow,engines,adapterDedicated,adapterShared,processDedicated,processShared,diskRead,diskWrite,diskIdle;
  Dictionary<string,double> previous=new Dictionary<string,double>();
  Stopwatch processClock=Stopwatch.StartNew();
  public sealed class Fast {
@@ -24,6 +24,7 @@ public sealed class PalPerformanceCounters : IDisposable {
   public Dictionary<int,double> processLoads=new Dictionary<int,double>();
   public Dictionary<string,double> dedicated,shared;
   public bool gpuAvailable;
+  public double? diskRead,diskWrite,diskActive;
  }
  public sealed class ProcessInfo {
   public int pid;public string identity,name;public double? cpu,gpu,dedicated,shared;public long memory;
@@ -31,6 +32,9 @@ public sealed class PalPerformanceCounters : IDisposable {
  public PalPerformanceCounters() {
   if(PdhOpenQuery(null,UIntPtr.Zero,out fast)!=0)throw new InvalidOperationException("PDH unavailable");
   PdhOpenQuery(null,UIntPtr.Zero,out slow);
+  diskIdle=Add(fast,@"\PhysicalDisk(*)\% Idle Time");
+  diskRead=Add(fast,@"\PhysicalDisk(_Total)\Disk Read Bytes/sec");
+  diskWrite=Add(fast,@"\PhysicalDisk(_Total)\Disk Write Bytes/sec");
   engines=Add(fast,@"\GPU Engine(*)\Utilization Percentage");
   adapterDedicated=Add(fast,@"\GPU Adapter Memory(*)\Dedicated Usage");
   adapterShared=Add(fast,@"\GPU Adapter Memory(*)\Shared Usage");
@@ -65,6 +69,10 @@ public sealed class PalPerformanceCounters : IDisposable {
  }
  public Fast ReadFast() {
   var result=new Fast();if(PdhCollectQueryData(fast)!=0)return result;
+  var idle=Read(diskIdle);if(idle!=null)foreach(var entry in idle){if(entry.Key=="_Total")continue;double busy=Math.Max(0,Math.Min(100,100-entry.Value));result.diskActive=Math.Max(result.diskActive??0,busy);}
+  var reads=Read(diskRead);var writes=Read(diskWrite);
+  if(reads!=null)foreach(var v in reads.Values)result.diskRead=v;
+  if(writes!=null)foreach(var v in writes.Values)result.diskWrite=v;
   result.dedicated=Adapters(Read(adapterDedicated));result.shared=Adapters(Read(adapterShared));
   var raw=Read(engines);result.gpuAvailable=raw!=null&&raw.Count>0;
   if(raw==null)return result;
