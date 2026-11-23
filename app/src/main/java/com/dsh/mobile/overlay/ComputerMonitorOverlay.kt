@@ -105,10 +105,13 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         }
         val box=FrameLayout(context).apply {
             background=GradientDrawable().apply{setColor(if(renderedLight)Color.rgb(250,251,253) else Color.rgb(30,34,43));cornerRadius=dp(14).toFloat();setStroke(1,if(renderedLight)Color.argb(45,80,90,110) else Color.argb(65,170,180,200))}
+            clipChildren=true;clipToPadding=true;clipToOutline=true
             elevation=dp(3).toFloat()
         }
         val content=LinearLayout(context).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(4),dp(4),dp(4),dp(10))}
-        box.addView(content,FrameLayout.LayoutParams(-1,-1))
+        // Keep the content at its settled size while the window morphs. Reflowing
+        // the detail column at every intermediate width wraps text into the gauges.
+        box.addView(content,FrameLayout.LayoutParams(p.width,p.height))
         // All non-scrollable panel surfaces share one gesture owner. Moving cancels
         // both the pending long press and the eventual click, including after a hold.
         val touchSlop=ViewConfiguration.get(context).scaledTouchSlop.toFloat()
@@ -208,6 +211,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
                     val w=if(startExpanded)dp(compactWidth) else dp(expandedWidth)
                     val h=if(startExpanded)dp(compactHeight) else minOf(dp(if(vertical)226 else if(rings)208 else 270),b.height()-dp(48))
                     val progress=(kotlin.math.abs(delta)/dp(80)).coerceIn(0f,1f)
+                    detail?.alpha=if(startExpanded&&delta<0)1f-progress else 1f
                     if((!startExpanded&&delta>0)||(startExpanded&&delta<0)){
                         p.width=(startW+(w-startW)*progress).roundToInt().coerceAtMost(b.width()-dp(20));p.height=(startH+(h-startH)*progress).roundToInt()
                         p.x=OverlayPlacement.coordinate(anchorX,0,maxOf(0,b.width()-p.width));p.y=OverlayPlacement.coordinate(anchorY,dp(24),maxOf(dp(24),b.height()-p.height-dp(24)))
