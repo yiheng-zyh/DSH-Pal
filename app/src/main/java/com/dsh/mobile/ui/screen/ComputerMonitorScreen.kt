@@ -58,6 +58,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
     LaunchedEffect(current?.instance) {gpuId=current?.gpus?.firstOrNull{it.load!=null||it.used!=null||it.shared!=null}?.id ?: current?.gpus?.firstOrNull()?.id}
     val processes=remember(current?.processes,query,sort){current?.processes.orEmpty().filter {it.name.contains(query,true)||it.pid.toString()==query}.sortedByDescending {p->when(sort){ComputerMetric.CPU->p.cpu;ComputerMetric.GPU->p.gpu;ComputerMetric.RAM->p.memory;ComputerMetric.VRAM->p.dedicated;ComputerMetric.SHARED->p.shared} ?: -1.0}}
     var ringVertical by remember {mutableStateOf(settings.computerMonitorRingVertical)}
+    var overlayLight by remember {mutableStateOf(settings.computerMonitorLight)}
     var overlayItems by remember {mutableStateOf(settings.computerMonitorItems)}
     var gpuTop by remember {mutableStateOf(settings.computerMonitorGpuTop)}
     var backgroundTransparency by remember {mutableFloatStateOf(settings.computerMonitorBackgroundTransparency.toFloat())}
@@ -142,6 +143,9 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                     }
                                 }
                             }
+                            Row(Modifier.fillMaxWidth().padding(bottom=12.dp),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                listOf(true to "浅色",false to "深色").forEach {(light,title)->Button(onClick={overlayLight=light;settings.computerMonitorLight=light;DshLiveService.current()?.refreshMonitor()},modifier=Modifier.weight(1f)){Text((if(overlayLight==light)"● " else "")+title,fontSize=12.sp)}}
+                            }
                             Text("展示项目",fontSize=13.sp)
                             listOf("CPU" to "CPU","GPU" to "GPU","RAM" to "内存","VRAM" to "专用显存","SHARED" to "共享显存","DISK" to "磁盘活动与读写","PROCESSES" to "进程前三项").forEach {(key,title)->
                                 ToggleRow(title,"",key in overlayItems){on->
@@ -163,7 +167,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                 DshLiveService.current()?.refreshMonitor()
                             },valueRange=0f..100f,modifier=Modifier.fillMaxWidth())
                             SettingsHint("0% 为不透明，100% 为全透明；只改变背景，文字与图表保持清晰，选择会记住。")
-                            SettingsHint("圆环短点切横竖，＋/−收展；滑动标题或图表移动，原地长按图表切换显卡。")
+                            SettingsHint("单击圆环切横竖，双击关闭；拖动图表移动，原地长按切显卡。拖右下角弧形把手向外展开、向内收起。")
                             Spacer(Modifier.height(12.dp))
                         }
                     }

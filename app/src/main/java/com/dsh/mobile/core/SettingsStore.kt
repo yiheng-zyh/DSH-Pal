@@ -48,6 +48,9 @@ class SettingsStore(context: Context) {
     var computerMonitorRingVertical: Boolean
         get() = prefs.getBoolean("computer_monitor_ring_vertical",false)
         set(value) {prefs.edit {putBoolean("computer_monitor_ring_vertical",value)}}
+    var computerMonitorLight: Boolean
+        get() = prefs.getBoolean("computer_monitor_light",true)
+        set(value) {prefs.edit {putBoolean("computer_monitor_light",value)}}
     var computerMonitorItems: Set<String>
         get() = prefs.getStringSet("computer_monitor_items",setOf("CPU","GPU","RAM","VRAM","SHARED","PROCESSES")).orEmpty().intersect(setOf("CPU","GPU","RAM","VRAM","SHARED","DISK","PROCESSES"))
         set(value) {if(value.isNotEmpty())prefs.edit {putStringSet("computer_monitor_items",value.toSet())}}
