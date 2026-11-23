@@ -26,6 +26,9 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     private var anchorY=settings.computerMonitorAnchorY
     private var token:Any?=null
     private var updates:Job?=null
+    private var rebuilding=false
+    private val layoutHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private var layoutGeneration=0
     private var renderedItems=emptySet<String>()
     private var renderedLight=true
     private var morphAnimator:android.animation.ValueAnimator?=null
@@ -59,11 +62,12 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     fun reconcile() {
         if(!settings.computerMonitorOverlay||!Settings.canDrawOverlays(context)||!context.getSystemService(android.os.PowerManager::class.java).isInteractive||context.getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked){remove();return}
         if(root!=null && (renderedStyle!=settings.computerMonitorStyle || renderedVertical!=settings.computerMonitorRingVertical || renderedItems!=settings.computerMonitorItems || renderedTop!=settings.computerMonitorGpuTop || renderedLight!=settings.computerMonitorLight)) {
-            morphAnimator?.cancel()
+            cancelMorph()
             if(renderedStyle!=settings.computerMonitorStyle)expanded=false
-            root?.let{runCatching{wm.removeView(it)}};root=null
-            build();render(ComputerPerformance.state.value)
-            if(root==null)remove()
+            if(!rebuilding){rebuilding=true;layoutHandler.post{
+                rebuilding=false
+                if(root!=null){build();render(ComputerPerformance.state.value)}
+            }}
             return
         }
         if(root!=null){applyBackgroundTransparency();return}
@@ -77,6 +81,8 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
     }
     private fun label(size:Float)=TextView(context).apply {textSize=size;setTextColor(if(settings.computerMonitorLight)Color.rgb(32,40,52) else Color.WHITE);setPadding(dp(10),dp(5),dp(10),dp(5))}
     private fun build() {
+        val generation=++layoutGeneration
+        val attached=root!=null
         renderedLight=settings.computerMonitorLight
         renderedItems=settings.computerMonitorItems;renderedTop=settings.computerMonitorGpuTop
         if(renderedItems.all{it=="PROCESSES"})expanded=true
@@ -89,6 +95,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         val expandedWidth=if(vertical)240 else if(rings)260 else 310
         val p=params?:WindowManager.LayoutParams(dp(if(expanded)expandedWidth else compactWidth),windowHeight,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,android.graphics.PixelFormat.TRANSLUCENT).apply {
+            windowAnimations=0
             gravity=Gravity.TOP or Gravity.LEFT
             x=(settings.computerMonitorX*b.width()).roundToInt();y=(settings.computerMonitorY*b.height()).roundToInt()
         }.also{params=it}
@@ -99,11 +106,14 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         p.x=OverlayPlacement.coordinate(anchorX,0,maxX);p.y=OverlayPlacement.coordinate(anchorY,minY,maxY)
         settings.computerMonitorAnchorX=anchorX;settings.computerMonitorAnchorY=anchorY
         fun saveDraggedPosition(){
-            anchorX=OverlayPlacement.anchor(p.x,0,maxX);anchorY=OverlayPlacement.anchor(p.y,minY,maxY)
+            anchorX=OverlayPlacement.anchor(p.x,0,maxOf(0,b.width()-p.width));anchorY=OverlayPlacement.anchor(p.y,minY,maxOf(minY,b.height()-p.height-dp(24)))
             settings.computerMonitorAnchorX=anchorX;settings.computerMonitorAnchorY=anchorY
             settings.computerMonitorX=p.x.toFloat()/b.width();settings.computerMonitorY=p.y.toFloat()/b.height()
         }
-        val box=FrameLayout(context).apply {
+        // Keep the WindowManager surface: replacing it during a morph can leave
+        // the outgoing surface visible over the new compact panel.
+        val box=(root?:FrameLayout(context)).apply {
+            removeAllViews()
             background=GradientDrawable().apply{setColor(if(renderedLight)Color.rgb(250,251,253) else Color.rgb(30,34,43));cornerRadius=dp(14).toFloat();setStroke(1,if(renderedLight)Color.argb(45,80,90,110) else Color.argb(65,170,180,200))}
             clipChildren=true;clipToPadding=true;clipToOutline=true
             elevation=dp(3).toFloat()
@@ -112,7 +122,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         // Keep the content at its settled size while the window morphs. Reflowing
         // the detail column at every intermediate width wraps text into the gauges.
         box.addView(content,FrameLayout.LayoutParams(p.width,p.height))
-        // All non-scrollable panel surfaces share one gesture owner. Moving cancels
+        // Graph, text and blank panel surfaces share one gesture owner. Moving cancels
         // both the pending long press and the eventual click, including after a hold.
         val touchSlop=ViewConfiguration.get(context).scaledTouchSlop.toFloat()
         var downX=0f;var downY=0f;var oldX=0;var oldY=0
@@ -126,9 +136,10 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         }
         fun cancelHold(){heldView?.removeCallbacks(longPress);heldView=null}
         val dragTouch=View.OnTouchListener {view,event->
+            if(generation!=layoutGeneration)return@OnTouchListener true
             when(event.actionMasked){
                 MotionEvent.ACTION_DOWN->{
-                    morphAnimator?.end();tapAction={view.performClick()};taps.onTouchEvent(event)
+                    finishMorph();view.parent?.requestDisallowInterceptTouchEvent(true);tapAction={if(generation==layoutGeneration)view.performClick()};taps.onTouchEvent(event)
                     cancelHold();downX=event.rawX;downY=event.rawY;oldX=p.x;oldY=p.y
                     moved=false;held=false;active=true
                     if(view.isLongClickable){heldView=view;view.postDelayed(longPress,ViewConfiguration.getLongPressTimeout().toLong())}
@@ -148,7 +159,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
                     if(active){
                         active=false
                         if(moved)saveDraggedPosition()
-                        else if(!held)taps.onTouchEvent(event)
+                        if(!held)taps.onTouchEvent(event)
                     }
                 }
                 MotionEvent.ACTION_CANCEL,MotionEvent.ACTION_POINTER_DOWN->{
@@ -192,7 +203,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         if(rings)box.setOnClickListener{toggleRingOrientation()}
         detail?.apply{
             setOnClickListener{if(rings)toggleRingOrientation()}
-            setOnTouchListener {view,event->if(event.actionMasked==MotionEvent.ACTION_DOWN)tapAction={view.performClick()};taps.onTouchEvent(event);true}
+            setOnTouchListener(dragTouch)
         }
         val grip=object:View(context){
             private val brush=Paint(Paint.ANTI_ALIAS_FLAG).apply{style=Paint.Style.STROKE;strokeWidth=dp(3).toFloat();strokeCap=Paint.Cap.ROUND}
@@ -205,7 +216,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         var gripX=0f;var gripY=0f;var startW=0;var startH=0;var startExpanded=false
         grip.setOnTouchListener {_,event->
             when(event.actionMasked){
-                MotionEvent.ACTION_DOWN->{morphAnimator?.end();gripX=event.rawX;gripY=event.rawY;startW=p.width;startH=p.height;startExpanded=expanded}
+                MotionEvent.ACTION_DOWN->{finishMorph();gripX=event.rawX;gripY=event.rawY;startW=p.width;startH=p.height;startExpanded=expanded}
                 MotionEvent.ACTION_MOVE->{
                     val delta=((event.rawX-gripX)+(event.rawY-gripY))/2
                     val w=if(startExpanded)dp(compactWidth) else dp(expandedWidth)
@@ -226,7 +237,7 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         box.visibility=if(ComputerPerformance.pageVisible.value)View.GONE else View.VISIBLE
         root=box
         applyBackgroundTransparency()
-        runCatching{wm.addView(box,p)}.onFailure{root=null;settings.computerMonitorOverlay=false}
+        runCatching{if(attached)wm.updateViewLayout(box,p) else wm.addView(box,p)}.onFailure{if(!attached){root=null;settings.computerMonitorOverlay=false}}
     }
     private fun applyBackgroundTransparency(){
         // Only the panel drawable fades; labels, graphs and touch targets stay intact.
@@ -272,24 +283,36 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
         graph?.state=state
         graph?.invalidate()
     }
-    private fun toggleRingOrientation(){morphAnimator?.cancel();settings.computerMonitorRingVertical=!settings.computerMonitorRingVertical;reconcile()}
+    private fun toggleRingOrientation(){cancelMorph();settings.computerMonitorRingVertical=!settings.computerMonitorRingVertical;reconcile()}
+    // Child replacement must happen after the current input dispatch completes.
     private fun animateExpanded(value:Boolean){
+        layoutHandler.post {if(root!=null)performAnimateExpanded(value)}
+    }
+    private fun performAnimateExpanded(value:Boolean){
         val old=params?:return;val fromW=old.width;val fromH=old.height
-        morphAnimator?.cancel();expanded=value
-        root?.let{runCatching{wm.removeView(it)}};root=null;build();render(ComputerPerformance.state.value)
+        cancelMorph();expanded=value
+        build();render(ComputerPerformance.state.value)
         val panel=root?:return;val p=params?:return;val toW=p.width;val toH=p.height;val b=bounds()
         val enabled=android.os.Build.VERSION.SDK_INT<26||android.animation.ValueAnimator.areAnimatorsEnabled()
         if(!enabled)return
-        morphAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply{
+        val animation=android.animation.ValueAnimator.ofFloat(0f,1f).apply{
             duration=260;interpolator=android.view.animation.PathInterpolator(.2f,0f,.1f,1f)
-            addUpdateListener{val t=it.animatedValue as Float;p.width=(fromW+(toW-fromW)*t).roundToInt();p.height=(fromH+(toH-fromH)*t).roundToInt()
+            addUpdateListener{if(morphAnimator!==it)return@addUpdateListener;val t=it.animatedValue as Float;p.width=(fromW+(toW-fromW)*t).roundToInt();p.height=(fromH+(toH-fromH)*t).roundToInt()
                 p.x=OverlayPlacement.coordinate(anchorX,0,maxOf(0,b.width()-p.width));p.y=OverlayPlacement.coordinate(anchorY,dp(24),maxOf(dp(24),b.height()-p.height-dp(24)))
                 detail?.alpha=t;runCatching{wm.updateViewLayout(panel,p)}}
-            start()
+            addListener(object:android.animation.AnimatorListenerAdapter(){
+                override fun onAnimationEnd(animator:android.animation.Animator){
+                    if(morphAnimator===animator)morphAnimator=null
+                    removeAllUpdateListeners()
+                }
+            })
         }
+        morphAnimator=animation;animation.start()
     }
-    private fun remove() {morphAnimator?.cancel();tapAction=null;updates?.cancel();updates=null;token?.let(ComputerPerformance::release);token=null;root?.let{runCatching{wm.removeView(it)}};root=null;params=null}
-    fun configurationChanged(){morphAnimator?.cancel();if(root!=null){root?.let{runCatching{wm.removeView(it)}};root=null;build();render(ComputerPerformance.state.value)}}
+    private fun cancelMorph(){val animation=morphAnimator;morphAnimator=null;animation?.cancel();animation?.removeAllUpdateListeners()}
+    private fun finishMorph(){val animation=morphAnimator;animation?.end();if(morphAnimator===animation)morphAnimator=null;animation?.removeAllUpdateListeners()}
+    private fun remove() {layoutHandler.removeCallbacksAndMessages(null);rebuilding=false;cancelMorph();tapAction=null;updates?.cancel();updates=null;token?.let(ComputerPerformance::release);token=null;root?.let{runCatching{wm.removeView(it)}};root=null;params=null}
+    fun configurationChanged(){cancelMorph();layoutHandler.post{if(root!=null){build();render(ComputerPerformance.state.value)}}}
     fun dispose(){runCatching{context.unregisterReceiver(visibilityReceiver)};remove();scope.cancel()}
     private class Graph(context:Context):View(context) {
         private var reveal=1f
