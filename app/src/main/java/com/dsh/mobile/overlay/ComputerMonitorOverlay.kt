@@ -185,19 +185,21 @@ class ComputerMonitorOverlay(private val context:Context,private val settings:Se
             }
         }
         graph!!.setOnTouchListener(dragTouch)
+        // The full detail viewport owns dragging, including space below short text.
+        // A ScrollView would consume those blank-area gestures before the root.
         if(vertical) {
             val body=LinearLayout(context).apply{orientation=LinearLayout.HORIZONTAL}
             body.addView(graph,LinearLayout.LayoutParams(dp(64),-1))
             if(expanded){
                 detail=label(10.5f).apply{setPadding(dp(6),dp(3),dp(6),dp(3));setLineSpacing(dp(1).toFloat(),1f)}
-                body.addView(ScrollView(context).apply{isVerticalScrollBarEnabled=false;addView(detail)},LinearLayout.LayoutParams(0,-1,1f))
+                body.addView(FrameLayout(context).apply{setOnTouchListener(dragTouch);setOnClickListener{toggleRingOrientation()};addView(detail,FrameLayout.LayoutParams(-1,-2))},LinearLayout.LayoutParams(0,-1,1f))
             } else detail=null
             content.addView(body,LinearLayout.LayoutParams(-1,0,1f))
         } else {
             content.addView(graph,LinearLayout.LayoutParams(-1,dp(if(rings)64 else if(expanded)64 else 40)))
             if(expanded){
                 detail=label(if(rings)11f else 12f)
-                content.addView(ScrollView(context).apply{addView(detail)},LinearLayout.LayoutParams(-1,0,1f))
+                content.addView(FrameLayout(context).apply{setOnTouchListener(dragTouch);setOnClickListener{if(rings)toggleRingOrientation()};addView(detail,FrameLayout.LayoutParams(-1,-2))},LinearLayout.LayoutParams(-1,0,1f))
             }else detail=null
         }
         if(rings)box.setOnClickListener{toggleRingOrientation()}

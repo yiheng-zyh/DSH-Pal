@@ -167,7 +167,7 @@ fun ComputerMonitorScreen(settings:SettingsStore,onBack:()->Unit) {
                                 DshLiveService.current()?.refreshMonitor()
                             },valueRange=0f..100f,modifier=Modifier.fillMaxWidth())
                             SettingsHint("0% 为不透明，100% 为全透明；只改变背景，文字与图表保持清晰，选择会记住。")
-                            SettingsHint("单击圆环切横竖，双击关闭；拖动图表、详情文字或空白处移动，原地长按图表切显卡。拖右下角弧形把手向外展开、向内收起。")
+                            SettingsHint("单击圆环切横竖，双击关闭；拖动图表或整个详情面板移动（含文字下方空白），原地长按图表切显卡。拖右下角弧形把手向外展开、向内收起。")
                             Spacer(Modifier.height(12.dp))
                         }
                     }
