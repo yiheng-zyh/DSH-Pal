@@ -204,6 +204,9 @@ object WebMotionScript {
     if (bypass || !nativeDrawer || !active || !mobile.matches || !frame || !side || !isOpen()) return;
     if (!(event.target instanceof Element)) return;
     if (event.target.closest('[data-dsh-mobile-sidebar]')) return;
+    // Menus and dialogs are portaled to body, outside the drawer DOM. They own
+    // the tap; treating them as the mask swallows actions such as session pin.
+    if (event.target.closest('[role="menu"],[role="listbox"],[role="dialog"],[role="alertdialog"]')) return;
     event.preventDefault(); event.stopImmediatePropagation();
     var control = sidebarToggle();
     if (control) closeWithMotion(control); else settleClosed();
