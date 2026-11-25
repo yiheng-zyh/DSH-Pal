@@ -1,11 +1,11 @@
 {
     "product":  "DSH Pal",
-    "version":  "0.1.5",
-    "versionCode":  15,
+    "version":  "0.1.6",
+    "versionCode":  16,
     "updated":  "2026-11-25",
-    "apkName":  "DSH-Pal-0.1.5.apk",
+    "apkName":  "DSH-Pal-0.1.6.apk",
     "sizeMb":  80.9,
-    "sha256":  "E6725799DD6EB8EA98653B67621D1C07FE717E8316BEEA226ECF8C1A80F8ED5A",
+    "sha256":  "B7D3B02BB5D103F130A8CF2EB814537C4BD788EE034EFE2709BFD79F67B21A81",
     "lanzou":  {
                    "url":  "https://wwbvv.lanzoul.com/b01i5zkceh",
                    "password":  "i1x2"
