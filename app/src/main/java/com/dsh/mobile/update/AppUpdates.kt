@@ -96,12 +96,7 @@ class AppUpdates private constructor(context:Context) {
     }
     private class MissingFeed:IOException()
     private class RateLimited:IOException()
-    private fun allowedRequest(raw:String):Boolean=runCatching{
-        val u=URI(raw);u.scheme=="https"&&u.userInfo==null&&u.port==-1&&u.rawFragment==null&&(
-            raw==AppLinks.RELEASE_API||raw==AppLinks.ANNOUNCEMENTS||AppLinks.releaseUrl(raw)||
-                u.host in setOf("release-assets.githubusercontent.com","objects.githubusercontent.com","github-releases.githubusercontent.com")
-        )
-    }.getOrDefault(false)
+    private fun allowedRequest(raw:String):Boolean=allows(raw)
     private fun open(raw:String,isDownload:Boolean=false):Response {
         var url=raw
         repeat(6){
@@ -206,5 +201,20 @@ class AppUpdates private constructor(context:Context) {
     companion object {
         @Volatile private var instance:AppUpdates?=null
         fun get(context:Context):AppUpdates=instance?:synchronized(this){instance?:AppUpdates(context).also{instance=it}}
+        /**
+         * 允许请求的地址白名单。`open()` 和单测都走这一份，避免两处分叉。
+         *
+         * 必须包含 DOWNLOAD_JSON（国内下载页）：它是蓝奏云下载通道的唯一数据源。
+         * 0.1.2 起就有「蓝奏云优先」逻辑，但这里一直漏登记，导致
+         * `text(AppLinks.DOWNLOAD_JSON)` 每次都被 `kotlin.check` 拒掉，
+         * 再被外层 `runCatching{}.getOrNull()` 吞成 null —— mirror 永远拿不到，
+         * 弹窗只剩 GitHub 的 AppRelease（无 lanzouUrl），蓝奏云按钮就一直置灰。
+         */
+        internal fun allows(raw:String):Boolean=runCatching{
+            val u=URI(raw);u.scheme=="https"&&u.userInfo==null&&u.port==-1&&u.rawFragment==null&&(
+                raw==AppLinks.RELEASE_API||raw==AppLinks.ANNOUNCEMENTS||raw==AppLinks.DOWNLOAD_JSON||AppLinks.releaseUrl(raw)||
+                    u.host in setOf("release-assets.githubusercontent.com","objects.githubusercontent.com","github-releases.githubusercontent.com")
+            )
+        }.getOrDefault(false)
     }
 }
