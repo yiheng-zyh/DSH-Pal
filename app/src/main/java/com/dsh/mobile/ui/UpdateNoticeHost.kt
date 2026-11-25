@@ -61,11 +61,14 @@ import com.dsh.mobile.update.AppUpdates
     val showPrompt=settled&&presented&&!updates.seen(promptKey)&&!state.downloading
 
     if(showPrompt){
+        // 无新版时这个弹窗仍要展示「本版更新说明」，此时不能再写「发现新版本」，
+        // 也不该显示下载按钮（没有可下的东西）。
         val available=release
         UpdatePromptDialog(
             show=true,
             version=available?.version ?: BuildConfig.VERSION_NAME,
             notes=available?.notes?.ifBlank{notes} ?: notes,
+            hasUpdate=available!=null,
             canGithub=available?.downloadable==true,
             canLanzou=available?.hasLanzou==true,
             message=if(state.downloading) state.downloadMessage else "",

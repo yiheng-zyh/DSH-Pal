@@ -118,12 +118,16 @@ data class AppAnnouncement(val id:String,val title:String,val body:String,val pu
         /**
          * 远程「更新说明」：与 announcements 同一个 JSON，顶层 releaseNotes 字段。
          * 这样改说明只需 push 到 GitHub，不必重新打包 APK。
-         * 返回 null 表示没配或格式不合格，调用方回退到 APK 内置的 app-release-notes.txt。
+         *
+         * [version] 是当前安装的版本名。只有 `releaseNotes.version` 与它**一致**时才采用：
+         * 否则远端还停留在上一版时，新装的 App 会把旧版公告当成自己的更新说明显示
+         * （0.1.5 首次实测到的错乱）。不一致即返回 null，调用方回退到 APK 内置文本。
          */
-        fun parseReleaseNotes(json:String):String? = runCatching{
+        fun parseReleaseNotes(json:String,version:String):String? = runCatching{
             val root=JSONObject(json)
             if(root.optInt("schemaVersion")!=1)return@runCatching null
             val notes=root.optJSONObject("releaseNotes")?:return@runCatching null
+            if(notes.optString("version").trim()!=version)return@runCatching null
             val text=notes.optString("body").trim()
             if(text.isBlank()||text.length>20000)null else text
         }.getOrNull()

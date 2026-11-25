@@ -44,6 +44,26 @@ class AppReleaseTest {
         assertTrue(AppAnnouncement.parse(root.toString(),7).isEmpty());assertTrue(AppAnnouncement.parse(root.toString(),10).isEmpty())
         a.put("id","unsafe/id");assertTrue(AppAnnouncement.parse(root.toString(),8).isEmpty())
     }
+    @Test fun remoteReleaseNotesOnlyApplyToTheInstalledVersion(){
+        // 远端 announcement 常比新包晚一天才推。若只取 body 不看 version，
+        // 新装的 0.1.5 会把还在写的 0.1.4 公告当成「本版说明」显示（0.1.5 实测到的错乱）。
+        fun feed(v:String,body:String)=JSONObject().put("schemaVersion",1)
+            .put("releaseNotes",JSONObject().put("version",v).put("body",body))
+            .put("announcements",JSONArray()).toString()
+        assertEquals("本版说明",AppAnnouncement.parseReleaseNotes(feed("0.1.5","本版说明"),"0.1.5"))
+        assertNull(AppAnnouncement.parseReleaseNotes(feed("0.1.4","旧版说明"),"0.1.5"))
+        assertNull(AppAnnouncement.parseReleaseNotes(feed("ver","x"),"0.1.5"))
+        // 缺 version 字段的老格式同样不收，回退到 APK 内置文本。
+        val noVersion=JSONObject().put("schemaVersion",1).put("releaseNotes",JSONObject().put("body","旧版说明")).toString()
+        assertNull(AppAnnouncement.parseReleaseNotes(noVersion,"0.1.5"))
+        // 其余校验照旧：空正文 / 超长 / 无 releaseNotes / 坏 JSON。
+        assertNull(AppAnnouncement.parseReleaseNotes(feed("0.1.5"," "),"0.1.5"))
+        assertNull(AppAnnouncement.parseReleaseNotes(feed("0.1.5","x".repeat(20001)),"0.1.5"))
+        assertNull(AppAnnouncement.parseReleaseNotes(JSONObject().put("schemaVersion",1).toString(),"0.1.5"))
+        assertNull(AppAnnouncement.parseReleaseNotes("not json","0.1.5"))
+        assertNull(AppAnnouncement.parseReleaseNotes(JSONObject().put("schemaVersion",2)
+            .put("releaseNotes",JSONObject().put("version","0.1.5").put("body","x")).toString(),"0.1.5"))
+    }
     @Test fun downloadJsonProvidesLanzouMirrorOnlyWhenNewerAndValid(){
         val sha="d".repeat(64)
         val json=JSONObject().put("version","0.2.0").put("versionCode",11).put("sizeMb",80.8)

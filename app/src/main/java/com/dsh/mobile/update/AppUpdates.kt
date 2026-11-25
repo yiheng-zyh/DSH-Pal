@@ -39,7 +39,7 @@ class AppUpdates private constructor(context:Context) {
         runCatching { preferences.getString("announcement_cache",null)?.let { json->
             mutable.update{it.copy(
                 announcements=AppAnnouncement.parse(json,BuildConfig.VERSION_CODE.toLong()),
-                releaseNotes=AppAnnouncement.parseReleaseNotes(json),
+                releaseNotes=AppAnnouncement.parseReleaseNotes(json,BuildConfig.VERSION_NAME),
             )}
         }}
     }
@@ -82,7 +82,7 @@ class AppUpdates private constructor(context:Context) {
                 try{
                     val json=text(AppLinks.ANNOUNCEMENTS,128*1024)
                     news=AppAnnouncement.parse(json,BuildConfig.VERSION_CODE.toLong())
-                    remoteNotes=AppAnnouncement.parseReleaseNotes(json)
+                    remoteNotes=AppAnnouncement.parseReleaseNotes(json,BuildConfig.VERSION_NAME)
                     preferences.edit().putString("announcement_cache",json).apply()
                 }catch(e:Exception){newsMessage=if(e is MissingFeed)"公告源尚未发布，保留已缓存公告"else "公告暂时不可用，保留已缓存公告"}
                 mutable.update { old->old.copy(checking=false,checkedAt=now,release=release,readyFile=old.readyFile?.takeIf{old.release?.id==release?.id&&old.release?.sha256==release?.sha256},
